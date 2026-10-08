@@ -132,8 +132,12 @@ jobs:
           archive=$(find release -maxdepth 1 -type f -name '*.tar.gz' -print -quit)
           test -n "$archive"
           sudo tar --no-same-owner -xzf "$archive" -C /opt/demoforge-ci
-          executable=$(rg --files /opt/demoforge-ci | rg '/demoforge$')
-          sandbox=$(rg --files /opt/demoforge-ci | rg '/chrome-sandbox$')
+          mapfile -t executables < <(find /opt/demoforge-ci -type f -name demoforge)
+          mapfile -t sandboxes < <(find /opt/demoforge-ci -type f -name chrome-sandbox)
+          test "${#executables[@]}" -eq 1
+          test "${#sandboxes[@]}" -eq 1
+          executable=${executables[0]}
+          sandbox=${sandboxes[0]}
           sudo chown -R root:root /opt/demoforge-ci
           sudo chmod -R go-w /opt/demoforge-ci
           sudo chmod 4755 "$sandbox"
