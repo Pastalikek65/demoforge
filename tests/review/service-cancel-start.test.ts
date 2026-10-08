@@ -76,6 +76,8 @@ test('cancel settles record-start while its initial navigation is still loading'
     env: {
       PATH: process.env.PATH,
       SystemRoot: process.env.SystemRoot,
+      DISPLAY: process.env.DISPLAY,
+      XAUTHORITY: process.env.XAUTHORITY,
       TEMP: scratch,
       TMP: scratch,
       HOME: home,
@@ -102,6 +104,7 @@ test('cancel settles record-start while its initial navigation is still loading'
     try {
       await Promise.race([
         pageRequested.promise,
+        new Promise<never>((_, reject) => { void startSettled.then(result => { if (result.status === 'rejected') reject(new Error(`Recording could not start: ${result.error.message}`)); }); }),
         new Promise<never>((_, reject) => { pageTimeout = setTimeout(() => reject(new Error('Chromium did not reach the local fixture')), 30_000); }),
       ]);
     } finally { if (pageTimeout) clearTimeout(pageTimeout); }
