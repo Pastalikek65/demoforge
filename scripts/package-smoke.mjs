@@ -103,18 +103,31 @@ async function cleanupOwnedTempRoot(directory) {
   await rm(resolved, { recursive: true, force: false });
 }
 
-async function assertNoEditorAlert(window) {
-  const alert = window.locator('[role="alert"]').first();
-  if (await alert.count()) {
-    const detail = (await alert.innerText()).trim();
+export function readEditorAlertSnapshot() {
+  const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+  const notice = document.querySelector('.setup-panel__notice');
+  const setupPanel = document.querySelector('.setup-panel');
+  return {
+    alertCount: alerts.length,
+    alertText: alerts[0]?.innerText?.trim() ?? '',
+    setupNoticePresent: Boolean(notice),
+    setupNoticeText: notice?.innerText?.trim() ?? '',
+    setupPanelPresent: Boolean(setupPanel),
+    setupPanelText: setupPanel?.innerText?.trim() ?? '',
+  };
+}
+
+export async function assertNoEditorAlert(window) {
+  const snapshot = await window.evaluate(readEditorAlertSnapshot);
+  if (snapshot.alertCount) {
+    const detail = snapshot.alertText;
     throw new Error(`The editor reported an error: ${detail || 'unspecified alert.'}`);
   }
-  const setupNotice = window.locator('.setup-panel__notice');
-  if (await setupNotice.count()) {
-    const detail = (await setupNotice.innerText()).trim();
+  if (snapshot.setupNoticePresent) {
+    const detail = snapshot.setupNoticeText;
     if (/Chromium is still unavailable/i.test(detail)) throw new Error(`Browser setup did not make Chromium available: ${detail}`);
-    if (/setup finished/i.test(detail) && await window.locator('.setup-panel').count()) {
-      throw new Error(`Browser setup completed but local requirements are still missing: ${(await window.locator('.setup-panel').innerText()).trim()}`);
+    if (/setup finished/i.test(detail) && snapshot.setupPanelPresent) {
+      throw new Error(`Browser setup completed but local requirements are still missing: ${snapshot.setupPanelText}`);
     }
   }
 }

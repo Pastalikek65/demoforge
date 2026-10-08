@@ -6,6 +6,7 @@ vi.mock('../../src/browser/recorder.js', () => ({
   installRecorder: vi.fn(),
 }));
 import { classifyScreenshotFailure, formatScreenshotFailure } from '../../src/browser/runner.js';
+import { SCREENSHOT_READINESS_TIMEOUT_ERROR } from '../../src/browser/capture.js';
 import { classifyReplayErrorDetails, classifyReplayUiState, waitForReplayCompletion } from '../../scripts/package-smoke.mjs';
 import { replay } from '../../src/browser/runner.js';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -48,6 +49,19 @@ describe('sanitized screenshot failure diagnostics', () => {
     });
   });
 
+  it('classifies the bounded frame-readiness timeout as a safe timeout diagnostic', () => {
+    const diagnostic = classifyScreenshotFailure(
+      new Error(SCREENSHOT_READINESS_TIMEOUT_ERROR),
+      'CAPTURE',
+      false,
+      { width: 960, height: 640 },
+    );
+    expect(diagnostic).toEqual({ operation: 'CAPTURE', cause: 'TIMEOUT', viewport: '960x640' });
+    expect(formatScreenshotFailure('step-001', diagnostic)).toBe(
+      'SCREENSHOT_FAILED: step-001 (operation=CAPTURE; cause=TIMEOUT; viewport=960x640)',
+    );
+  });
+
   it('surfaces only recognized screenshot metadata in package-smoke diagnostics', () => {
     const raw = 'SCREENSHOT_FAILED: private-step CANARY (operation=CAPTURE; cause=CAPTURE_REJECTED; viewport=960x640)';
     const details = classifyReplayErrorDetails(raw);
@@ -76,6 +90,7 @@ describe('sanitized screenshot failure diagnostics', () => {
       setDefaultTimeout: vi.fn(),
       setDefaultNavigationTimeout: vi.fn(),
       goto: vi.fn(async () => {}),
+      evaluate: vi.fn(async () => undefined),
       isClosed: vi.fn(() => false),
       viewportSize: vi.fn(() => ({ width: 960, height: 640 })),
       video: vi.fn(() => undefined),

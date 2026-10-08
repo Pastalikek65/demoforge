@@ -291,6 +291,51 @@ describe('browser runner', () => {
     expect((await stat(run.video!)).size).toBeGreaterThan(0);
   }, 60_000);
 
+  it('rejects recording startup when cancelled during its initial frame-readiness wait', async () => {
+    const outputDir = await makeOutputDirectory();
+    let resolveFrameWaitStarted!: () => void;
+    const frameWaitStarted = new Promise<void>((resolve) => { resolveFrameWaitStarted = resolve; });
+    const readinessServer = createServer((request, response) => {
+      if (request.url === '/frame-wait-started') {
+        resolveFrameWaitStarted();
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      response.end(`<!doctype html><html><head><script>
+        let notified = false;
+        window.requestAnimationFrame = () => {
+          if (!notified) {
+            notified = true;
+            fetch('/frame-wait-started').catch(() => {});
+          }
+          return 1;
+        };
+      </script></head><body>Frame readiness cancellation fixture</body></html>`);
+    });
+    await new Promise<void>((resolve) => readinessServer.listen(0, '127.0.0.1', resolve));
+    const address = readinessServer.address();
+    if (!address || typeof address === 'string') throw new Error('Readiness fixture server did not bind a TCP port');
+    const controller = new AbortController();
+
+    try {
+      const starting = startRecording({
+        url: `http://127.0.0.1:${address.port}`,
+        outputDir,
+        viewport: { width: 960, height: 640 },
+        headless: true,
+        signal: controller.signal,
+      });
+      await frameWaitStarted;
+      controller.abort();
+      await expect(starting).rejects.toMatchObject({ message: 'RECORDING_CANCELLED' });
+    } finally {
+      controller.abort();
+      await new Promise<void>((resolve, reject) => readinessServer.close((error) => error ? reject(error) : resolve()));
+    }
+  }, 30_000);
+
   it('returns a named failure when a required runtime variable is missing', async () => {
     const outputDir = await makeOutputDirectory();
     const workflow = project([

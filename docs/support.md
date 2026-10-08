@@ -1,6 +1,6 @@
 # Platform and runtime support
 
-DemoForge has passed preview package acceptance on Windows x64 and Ubuntu 24.04 x64. A stable 1.0.0 release has not been published. The [verification record](verification.md) separates the accepted 0.1.0 preview packages from the pending 1.0.0 candidate run.
+DemoForge has passed preview package acceptance on Windows x64 and Ubuntu 24.04 x64. A stable 1.0.0 release has not been published. The [verification record](verification.md) separates the accepted 0.1.0 preview packages from the unqualified 1.0.0 candidate packages.
 
 | Environment | Source verification | Installed archive |
 | --- | --- | --- |
@@ -9,7 +9,7 @@ DemoForge has passed preview package acceptance on Windows x64 and Ubuntu 24.04 
 | Windows x64, local desktop | The current candidate source requires Node.js 24 LTS for source-checkout development and CI. | Local acceptance of a 1.0.0 archive has not yet been run on this desktop; the Windows CI evidence is recorded separately. |
 | Other operating systems, architectures, and Linux distributions | Not qualified | Not qualified |
 
-The 0.1.0 package results qualify the tested preview archives only. Their independent download checksums are recorded in [verification evidence](verification.md). The latest 1.0.0 candidate run passed both platforms, but earlier Linux runs failed during replay, including a diagnosed first-step screenshot failure. Capture behavior has not changed; that unresolved intermittent failure blocks stable release. The preview remains a draft.
+The 0.1.0 results qualify only the tested preview archives. For 1.0.0, the 29d2 diagnostic run passed both extracted-package flows but did not change capture timing. In the later 40-launch Linux comparison, immediate first captures passed 7/20 and returned `CAPTURE_REJECTED` 13/20; captures after two animation frames passed 20/20. The strict Linux real-runner test still failed at run 7. Windows source tests passed, but its fresh-package smoke run stopped after the first-run progress check when the harness read a setup notice already removed by the success state. The atomic harness observation and 2-second-capped frame wait inside a 5-second screenshot budget passed scoped independent review; the current source typecheck, build, and full suite also passed (185/185 tests across 33 files). Fresh corrected Windows and Linux package CI remains pending. The diagnostic comparison does not prove a root cause or guarantee presentation on every system; stable 1.0.0 remains unpublished, and the preview remains a draft.
 
 Chromium exposes a joined, unescaped title string rather than original argument boundaries. The parser treats quote-bearing titles as ambiguous, suppresses renderer-role classification for them, and still checks raw whitespace tokens for forbidden switches, including quote-wrapped switches. This conservative behavior may reject titles unnecessarily. Observed workflow-browser launches use pinned Chromium without caller-controlled arguments, executable replacement, or channel selection; the sandbox tests guard forbidden launch options.
 
@@ -19,4 +19,4 @@ The installed editor includes its Electron runtime. Source-checkout CLI installa
 
 Export FFmpeg is installed separately and must support `libx264` and the `subtitles` filter. The Playwright recording helper does not replace that export dependency. Linux needs a display session, browser/Electron shared libraries, and the Electron sandbox helper installed with the ownership and mode described in [Linux sandbox requirements](linux-sandbox.md). See [installation and acceptance](packaging.md) for platform-specific steps.
 
-Before stable 1.0.0, version-1 format fixtures and the first stable installation experience still need verification. Current archives are unsigned. A checksum verifies the downloaded file against the published release asset; it is not a publisher signature. CI package acceptance does not establish independent user pilots or production deployments.
+Source tests cover version-1 project/run fixtures and record and parse a synthetic workflow through the compiled CLI. Corrected packages still need fresh acceptance for packaged version-1 open/save/replay behavior and the first stable installation experience. Current archives are unsigned. A checksum verifies the downloaded file against the published release asset; it is not a publisher signature. CI package acceptance does not establish independent user pilots or production deployments.

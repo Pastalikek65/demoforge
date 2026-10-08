@@ -4,6 +4,7 @@ import { chromium, type Browser, type BrowserContext, type Page, type Video } fr
 import { workflowHash } from '../core/fingerprint.js';
 import type { Project, RecordOptions, RecordingSession, ReplayOptions, RunResult, Step, StepResult } from '../shared/types.js';
 import { hasSensitiveUrlQuery, isHttpUrl } from '../shared/url.js';
+import { captureScreenshotWithReadiness, SCREENSHOT_READINESS_TIMEOUT_ERROR } from './capture.js';
 import { installCursorTracking, installRecorder, type CapturedInteraction, type CursorSample, type RecorderInstallation } from './recorder.js';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -58,6 +59,7 @@ export function classifyScreenshotFailure(
   else if (/\bTarget crashed\b/i.test(message)) cause = 'TARGET_CRASHED';
   else if (pageClosed) cause = 'PAGE_CLOSED';
   else if (errorName === 'TargetClosedError' || /\b(?:Target closed|Page closed|Target page, context or browser has been closed)\b/i.test(message)) cause = 'TARGET_CLOSED';
+  else if (message === SCREENSHOT_READINESS_TIMEOUT_ERROR) cause = 'TIMEOUT';
   else if (errorName === 'TimeoutError' || /\bTimeout \d+ms exceeded\b/i.test(message)) cause = 'TIMEOUT';
   else if (operation === 'CAPTURE' && viewport && (viewport.width <= 0 || viewport.height <= 0)) cause = 'EMPTY_VIEWPORT';
   else if (operation === 'CAPTURE' && /\bUnable to capture screenshot\b/i.test(message)) cause = 'CAPTURE_REJECTED';
@@ -226,7 +228,7 @@ export async function replay(project: Project, options: ReplayOptions): Promise<
         }
         if (!screenshotFailure) {
           try {
-            await page.screenshot({ path: file, timeout: 5_000, animations: 'disabled' });
+            await captureScreenshotWithReadiness(page, { path: file, animations: 'disabled' });
             result.screenshot = file;
           } catch (error) {
             let closedAfterFailure = pageClosed;
@@ -504,7 +506,7 @@ export async function startRecording(options: RecordOptions): Promise<RecordingS
     await mkdir(dirname(file), { recursive: true });
     let screenshot: string | undefined;
     try {
-      await recordingPage.screenshot({ path: file, timeout: 5_000, animations: 'disabled' });
+      await captureScreenshotWithReadiness(recordingPage, { path: file, animations: 'disabled' });
       screenshot = file;
     } catch { /* A closed or transitioning page can still leave a valid recorded step. */ }
     return { startMs, endMs: Math.max(startMs, Date.now() - startedAtMs), ...(screenshot ? { screenshot } : {}) };
@@ -566,6 +568,7 @@ export async function startRecording(options: RecordOptions): Promise<RecordingS
     if (cancelled || options.signal?.aborted) throw new Error('RECORDING_CANCELLED');
     await recordingPage.goto(options.url, { waitUntil: 'domcontentloaded', timeout: DEFAULT_TIMEOUT_MS });
     const initialTiming = await appendScreenshot(initialStep, 0);
+    if (cancelled || options.signal?.aborted) throw new Error('RECORDING_CANCELLED');
     stepTimings[0] = { ...initialTiming, startMs: 0 };
   } catch {
     await closeResources();

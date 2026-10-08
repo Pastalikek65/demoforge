@@ -14,7 +14,7 @@ The script writes a detailed JSON result to `artifacts/performance-benchmark.jso
 
 ## Recorded run
 
-The following values came from one run on 2026-10-08 at 16:16:39 UTC after the explicit workflow-browser sandbox and installer lifecycle changes. They describe this machine and this synthetic workflow; they are not cross-platform performance claims.
+The following values came from one run on 2026-10-08 at 19:20:42 UTC with the bounded two-animation-frame screenshot readiness wait. They describe this machine and this synthetic workflow; they are not cross-platform performance claims or a controlled comparison with earlier versions. The retained result is `artifacts/performance-capture-readiness.json`.
 
 | Measurement | Result |
 | --- | ---: |
@@ -23,14 +23,14 @@ The following values came from one run on 2026-10-08 at 16:16:39 UTC after the e
 | Node.js | v24.21.0 |
 | Viewport | 1280×720 |
 | Workflow | 25 steps, 80 ms pause after browser actions |
-| Recorded input duration | 4,194 ms |
-| Replay wall clock | 5,004.5 ms |
-| Export wall clock | 7,558.6 ms |
-| Capture output | 1,268,160 bytes total; 533,735-byte WebM and 25 screenshots |
-| MP4 | 183,168 bytes |
-| GIF | 1,058,856 bytes |
-| All export output | 1,880,300 bytes, including guide files and 25 step images |
-| Node RSS sampled peak during replay | 153,710,592 bytes (about 146.6 MiB) |
-| Node RSS sampled peak during export | 158,400,512 bytes (about 151.1 MiB) |
+| Recorded input duration | 3,571 ms |
+| Replay wall clock | 3,946.6 ms |
+| Export wall clock | 3,275.4 ms |
+| Capture output | 1,220,913 bytes total; 486,468-byte WebM and 25 screenshots |
+| MP4 | 159,200 bytes |
+| GIF | 795,276 bytes |
+| All export output | 1,592,769 bytes, including guide files and 25 step images |
+| Node RSS sampled peak during replay | 154,513,408 bytes (about 147.4 MiB) |
+| Node RSS sampled peak during export | 159,543,296 bytes (about 152.2 MiB) |
 
 The benchmark measures each phase with `performance.now()` and samples this Node process's RSS every 20 ms. The RSS values exclude the separately spawned Chromium and FFmpeg processes, so they do not represent total application memory. The sample interval can also miss brief peaks. Replay includes browser startup, workflow execution, screenshots, and video finalization; export includes FFmpeg processing and guide generation.
