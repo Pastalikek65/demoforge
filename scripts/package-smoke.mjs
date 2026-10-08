@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { _electron as electron, chromium } from 'playwright';
 import { createLinuxNamespaceObserver, linuxNamespaceObserverMode } from './linux-namespace-observer.mjs';
-import { snapshotOwnedProcesses } from './linux-processes.mjs';
+import { chromiumProcessEvidence, isKnownLinuxProcessState, isLiveLinuxProcess, snapshotOwnedProcesses } from './linux-processes.mjs';
 
 const execFile = promisify(execFileCallback);
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -144,39 +144,53 @@ async function waitForLinuxWorkflowBrowserSandbox(mainProcessId, signal, timeout
   let lastBrowserProcesses = [];
   while (!signal.aborted && Date.now() < deadline) {
     const descendants = await snapshotOwnedProcesses(mainProcessId);
-    const chromeProcesses = descendants.filter((entry) => /chrome/i.test(entry.comm)
+    const chromeProcesses = descendants.filter((entry) => /^chrome(?:[-_].*)?$/i.test(entry.comm)
       || /^chrome(?:-headless-shell)?(?:\.exe)?$/i.test(path.basename(entry.args[0] ?? '')));
-    if (chromeProcesses.length > 0) observedBrowser = true;
-    const diagnosticFlags = new Set([
-      '--no-sandbox', '--disable-setuid-sandbox', '--disable-seccomp-filter-sandbox',
-      '--disable-namespace-sandbox', '--disable-renderer-sandbox',
-    ]);
-    const unsafeFlags = [...new Set(chromeProcesses.flatMap((entry) => entry.args.filter((argument) => diagnosticFlags.has(argument))))];
+    const liveChromeProcesses = chromeProcesses.filter(isLiveLinuxProcess);
+    if (liveChromeProcesses.length > 0) observedBrowser = true;
+    const processEvidence = liveChromeProcesses.map((entry) => ({ entry, evidence: chromiumProcessEvidence(entry) }));
+    lastBrowserProcesses = chromeProcesses.slice(0, 80).map((entry) => {
+      const evidence = chromiumProcessEvidence(entry);
+      const safeComm = /^chrome(?:-sandbox|-headless-shell)?$/i.test(entry.comm) ? entry.comm.toLowerCase() : 'other';
+      const safeFormat = new Set(['empty', 'nul-separated', 'chromium-title', 'chromium-title-ambiguous', 'chromium-title-unparsed']).has(entry.commandLineFormat)
+        ? entry.commandLineFormat : 'unknown';
+      return {
+        pid: entry.pid,
+        parentPid: entry.parentPid,
+        comm: safeComm,
+        state: /^[A-Za-z]$/.test(entry.state) ? entry.state : 'unknown',
+        commandLineFormat: safeFormat,
+        commandLineArgumentCount: Array.isArray(entry.args) ? entry.args.length : 0,
+        commandLineAvailable: evidence.commandLineAvailable,
+        processType: evidence.processType ?? null,
+        roleFlags: evidence.roleFlags,
+        forbiddenSandboxFlags: evidence.forbiddenSandboxFlags,
+        seccompMode: entry.seccompMode,
+      };
+    });
+    const commandLineUnavailable = chromeProcesses.some((entry) => !isKnownLinuxProcessState(entry))
+      || processEvidence.some(({ evidence }) => !evidence.commandLineAvailable);
+    const unsafeFlags = [...new Set(processEvidence.flatMap(({ evidence }) => evidence.forbiddenSandboxFlags))];
     assert.deepEqual(unsafeFlags, [], 'the packaged replay Chromium must not disable its Linux sandbox');
-    const safeRoleFlags = new Set(['--type=renderer', '--type=zygote', '--type=gpu-process', '--type=utility', '--type=broker']);
-    const renderer = chromeProcesses.find((entry) => entry.args.includes('--type=renderer') || /renderer/i.test(entry.comm));
-    lastBrowserProcesses = chromeProcesses.slice(0, 80).map((entry) => ({
-      pid: entry.pid,
-      parentPid: entry.parentPid,
-      comm: entry.comm,
-      roleFlags: entry.args.filter((argument) => safeRoleFlags.has(argument)),
-      seccompMode: entry.seccompMode,
-    }));
-    if (renderer) {
-      if (renderer.seccompMode === 2) {
+    if (!commandLineUnavailable) {
+      const renderer = processEvidence.find(({ evidence }) => evidence.processType === 'renderer')?.entry;
+      if (renderer?.seccompMode === 2) {
         const namespaces = await readOwnedNamespaceLinks(descendants, mainProcessId, renderer.pid);
+        const rendererEvidence = chromiumProcessEvidence(renderer);
+        const safeComm = /^chrome(?:-sandbox|-headless-shell)?$/i.test(renderer.comm) ? renderer.comm.toLowerCase() : 'other';
         return {
           observed: true,
           processScope: 'descendants of the packaged Electron main PID only',
           renderer: {
             pid: renderer.pid,
             parentPid: renderer.parentPid,
-            comm: renderer.comm,
-            roleFlags: renderer.args.filter((argument) => safeRoleFlags.has(argument)),
+            comm: safeComm,
+            processType: rendererEvidence.processType,
+            roleFlags: rendererEvidence.roleFlags,
             seccompMode: renderer.seccompMode,
           },
           namespaces,
-          forbiddenSandboxFlags: unsafeFlags,
+          forbiddenSandboxFlags: [],
         };
       }
     }

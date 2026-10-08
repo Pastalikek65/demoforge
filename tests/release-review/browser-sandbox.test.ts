@@ -25,5 +25,12 @@ test.each(['replay', 'record'] as const)('%s preserves the workflow browser OS s
       expect(result.status).toBe('failed');
     }
     expect(launch).toHaveBeenCalledWith(expect.objectContaining({ chromiumSandbox: true }));
+    // Process-title observation relies on Chromium constructing its own child
+    // role switches. Workflow input must never supply browser arguments or a
+    // replacement executable through these launch paths.
+    const launchOptions = launch.mock.calls[0]?.[0];
+    expect(launchOptions).not.toHaveProperty('args');
+    expect(launchOptions).not.toHaveProperty('executablePath');
+    expect(launchOptions).not.toHaveProperty('channel');
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
