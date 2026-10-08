@@ -1,47 +1,39 @@
 # Verification evidence
 
-Updated 2026-10-08. DemoForge's tested 0.1.0 preview packages passed Windows and Ubuntu CI acceptance. The 1.0.0 candidate is not yet accepted or published; this record distinguishes the existing preview evidence from work required for the candidate.
+DemoForge 1.0.0 is qualified at source commit `c27561a0401a1971bef26cb40d52723c33d5c1ee`. The [release](https://github.com/Pastalikek65/demoforge/releases/tag/v1.0.0) contains the exact accepted archives, `SHA256SUMS.txt`, two package-acceptance logs and a scoped release attestation. The archives are unsigned.
 
-## Accepted 0.1.0 preview package run
+## Accepted distribution
 
-Commit `337e333`, GitHub Actions run [37820720332](https://github.com/Pastalikek65/demoforge/actions/runs/37820720332):
+[GitHub Actions run 37831700885](https://github.com/Pastalikek65/demoforge/actions/runs/37831700885) completed successfully on 2026-10-08:
 
-| Platform job | Source checks | Extracted-package acceptance |
+| Platform | Source checks | Fresh archive checks |
 | --- | --- | --- |
-| [Windows x64, job 113460751207](https://github.com/Pastalikek65/demoforge/actions/runs/37820720332/job/113460751207) | **157/157 tests across 27 files** passed. | Fresh package launch and browser setup, actual UI recording and replay, masked/captioned exports in MP4, GIF, Markdown and HTML, and reopening generated outputs passed. |
-| [Ubuntu 24.04 x64, job 113460751037](https://github.com/Pastalikek65/demoforge/actions/runs/37820720332/job/113460751037) | **156 passed and one Windows-only test skipped**, across 27 files. | Packaged recording and replay passed. The harness identified the workflow renderer, observed Seccomp mode 2 and namespace metadata, checked masks and captions in all four formats, and reopened the outputs. |
+| [Windows x64, job 113498409559](https://github.com/Pastalikek65/demoforge/actions/runs/37831700885/job/113498409559) | 185/185 tests across 33 files. | All ten acceptance stages passed. |
+| [Ubuntu 24.04 x64, job 113498409985](https://github.com/Pastalikek65/demoforge/actions/runs/37831700885/job/113498409985) | 184 passed, one Windows-only skip, across 33 files. | All ten acceptance stages passed; enabled Electron/Chromium sandboxing and Seccomp mode 2 observed. |
 
-These results qualify the tested 0.1.0 preview archives only. Both artifacts were independently downloaded and hashed; their inner archive checksums match the CI manifests and uploaded draft assets:
+Fresh package checks launch the packaged app with an isolated profile, install the vendor browser through the UI, record and replay a synthetic five-step workflow, save and reopen version-one projects, and export MP4, GIF, Markdown and HTML. FFmpeg decodes outputs and checks opaque-mask/caption pixels. Secret canaries are excluded from saved/exported data and raw captures are absent from published outputs. The harness reopens HTML, PNG and GIF outputs in Chromium. Namespace IDs are observations, not proof of namespace separation.
 
-| Archive | Bytes | SHA-256 |
+## Independent archive verification
+
+Both GitHub artifacts were independently downloaded. Their API sizes and SHA-256 values, CRCs, paths and file types were checked before extracting their outer evidence ZIPs. The inner packages were inspected without extraction or execution. Their checksums match CI manifests; packaged app.asar is version 1.0.0 and contains the compiled readiness correction. Executables, Electron/Chromium credits and matching embedded dependency notices are present.
+
+| Distribution archive | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `DemoForge-0.1.0-win-x64.zip` | 161285951 | `71534b8c1d5733fca66771da205130a456f65a0003cc0d7b0f7f5272a468cb63` |
-| `DemoForge-0.1.0-linux-x64.tar.gz` | 126943399 | `3923d9eab8278131f1d99706218b551db8fe159079c455844167f2586f9b0a81` |
+| `DemoForge-1.0.0-win-x64.zip` | 161288480 | `e50f94665d1a361a70e2b98af8e88b444d29223090bbae96a268722f0550a2ee` |
+| `DemoForge-1.0.0-linux-x64.tar.gz` | 126945729 | `71850f2f6e5da4b7d05d22665c0aa5068887707da9a2a7ac210651e1b516f3c7` |
 
-The preview release remains a draft. Local retained job logs are `.control/windows-ci-337-pass.log` and `.control/linux-ci-337-pass.log`.
+The Windows outer artifact 11573443180 was 163145899 bytes with SHA-256 `4de019fc9b964fbb742c1061b39ae994d1eaaede56a59cf6b17ca55efbd5b263`. Linux artifact 11573473418 was 128600671 bytes with SHA-256 `6bad79b088781d9f40710ca8e44022ee0580d9a32976d14e7a8edd74063cc067`. These outer hashes identify CI evidence containers; download users should verify the distribution hashes above.
 
-## Current 1.0.0 candidate diagnostics
+## Regression and scope
 
-At candidate `77a25d2`, run [37822691803](https://github.com/Pastalikek65/demoforge/actions/runs/37822691803) passed Windows package acceptance but timed out replaying the recorded workflow on Linux. Diagnostic-only commit `34fd77f`, run [37824875571](https://github.com/Pastalikek65/demoforge/actions/runs/37824875571), reproduced the Linux failure: the first step's navigation returned, but its post-step screenshot failed. The step was reported failed and four later steps were not run. Windows again passed package acceptance. The Linux source suite passed 161 tests with one Windows-only skip; Windows passed 162 tests across 28 files.
+Earlier Linux candidates failed the first post-navigation screenshot. At `aa0a9d4`, a 40-launch comparison had 7/20 immediate captures pass versus 20/20 after two animation-frame callbacks, while the strict real-runner test still failed. The correction at `c27561a` waits for two callbacks within the existing five-second screenshot budget, with a two-second readiness bound. The unchanged real-runner test then passed 20 fresh headed sessions on each platform and both package flows passed. This closes the tested reliability finding. A separate diagnostic at `c27561a` observed 9/20 immediate captures pass and 19 post-frame captures succeed, with one readiness timeout and capture not run. The rendering opportunity is empirical, not a universal compositor or website guarantee; timeouts remain controlled failures.
 
-Commit `29d2e68` added allowlisted operation/cause/viewport diagnostics. Its [CI run 37826381848](https://github.com/Pastalikek65/demoforge/actions/runs/37826381848) passed both extracted-package flows, Windows 172 tests and Linux 171 tests with one Windows-only skip, across 29 files. That diagnostic change did not alter capture timing and does not establish a fix for the intermittent failure.
+Recording-start cancellation reproduced before correction and passed afterward. The package harness now takes one atomic DOM snapshot during setup transitions; error, progress, control-lock and success criteria remain unchanged. Independent review found no concrete blocker in these changes.
 
-The next diagnostic, commit `aa0a9d4`, run [37829363612](https://github.com/Pastalikek65/demoforge/actions/runs/37829363612), compared 40 cold headed Chromium launches at 1280×720 in 20 paired rounds. Setup and launch succeeded in both conditions. A first screenshot immediately after `DOMContentLoaded` passed 7 times and failed 13 times with `CAPTURE_REJECTED`; after two animation-frame callbacks, all 20 captures passed with nonempty 1280×720 PNGs. The strict real-runner cold-capture test in the same Linux job still failed at run 7, before completing its 20-run assertion. These results associate the rejection with immediate capture in this fixture; they do not establish the underlying browser/compositor cause or a universal presentation guarantee.
+Source tests separately cover version-one fixtures and unknown-version rejection, strict project/run boundaries, changed targets, secret exclusion, cancellation and audio/media effects. The compiled CLI is tested for record, replay, export and doctor. Manual audio-editor save/reopen evidence came from the unpackaged editor and is not separate package proof. A representative local 25-step/four-format measurement is in [performance](performance.md), with memory and platform limits disclosed.
 
-The Linux source suite for `aa0a9d4` failed with that strict capture test: 173 passed, one skipped, and one failed across 31 files. The Windows source suite passed 175 tests, but its fresh-package acceptance did not pass: the first-run progress and locked-controls checks passed, then the harness waited on a setup-notice locator after the success state had removed it. This is a smoke-harness observation race, not evidence that browser installation failed and not a package acceptance pass. The harness now reads alert, notice, and setup-panel state in one DOM snapshot. A scoped independent review found no concrete defect in the capture, cancellation, or atomic-observation changes. Current-source typecheck and build passed, and the full source suite passed 185/185 tests across 33 files (`artifacts/source-acceptance-capture-readiness.log`). Fresh corrected Windows and Linux package CI is still pending.
+## Historical preview
 
-The current working-tree capture correction waits for two animation-frame callbacks in the ordinary page context, with a maximum 2-second frame wait inside a 5-second total screenshot budget; the screenshot receives only the remaining time. A stalled or replaced animation-frame callback can exhaust the readiness cap; a frozen renderer remains bounded by the caller's capture timeout and close path. It adds no retries and does not guarantee that content has been presented by every browser or operating-system compositor. The source review and source suite passed; fresh corrected Windows and Linux package acceptance remains the release gate.
+The public source MVP and beta preceded stable qualification. At `337e333`, [run 37820720332](https://github.com/Pastalikek65/demoforge/actions/runs/37820720332) accepted the 0.1.0 preview archives; those draft-release assets are not the stable distribution. Windows preview SHA-256: `71534b8c1d5733fca66771da205130a456f65a0003cc0d7b0f7f5272a468cb63`; Linux preview: `3923d9eab8278131f1d99706218b551db8fe159079c455844167f2586f9b0a81`.
 
-## Source and behavior evidence
-
-The quote-wrapped forbidden-launch-flag regression reproduced against the earlier `8af92e0` snapshot and passed after the conservative parser correction. The independent source audit closed the bypass finding. Chromium provides an unescaped joined title string, so quote-bearing titles are treated as ambiguous and renderer-role classification is suppressed; raw whitespace-token checks still catch forbidden switches. This may false-reject titles. Observed workflow-browser launches use pinned Chromium without caller-controlled arguments, executable replacement, or channel selection; Chromium constructs the renderer type as its first switch. Raw argv is not exposed. Sandbox tests check forbidden launch options. Local retained regression evidence is `artifacts/linux-title-regression/result.log`.
-
-The manual audio-editor source check confirmed that synthetic audio settings survive save/reopen and the timeline displays the start marker. It used the unpackaged editor; local retained text evidence is `artifacts/screenshots/audio-timeline-evidence.txt`. It does not qualify a package.
-
-Earlier Linux runs failed while reading namespace links or identifying the renderer. The 337e333 package run passed both stages. Namespace IDs remain observations, not proof of namespace separation. Both preview package runs kept the application running as an ordinary user with Chromium sandboxing enabled.
-
-## Remaining 1.0.0 candidate checks
-
-Source tests cover version-1 project/run fixtures, and the compiled source CLI test records a synthetic workflow and parses its project and run through the core validators. Those source-level checks do not qualify a distribution archive. The corrected 1.0.0 candidate still needs fresh Windows and Linux CI acceptance against its exact versioned archives and independent SHA-256 records, including packaged version-1 open/save/replay behavior and the first stable installation experience. The CLI is documented for source-checkout installation with Node.js 24 LTS.
-
-Current archives are unsigned. A checksum identifies file contents but is not a publisher signature. Package CI does not establish independent user pilots or production deployments.
+No earlier stable upgrade, every effect combination in installed packages, independent user pilot, download count, star count or production deployment is claimed. Supported scope is Windows x64 and Ubuntu 24.04 x64. SHA-256 identifies contents; it is not a publisher signature.

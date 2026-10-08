@@ -1,6 +1,6 @@
 # Türkçe hızlı başlangıç
 
-DemoForge, tarayıcıdaki bir iş akışını kaydedip yeniden oynatır; gerçek video, GIF ve adım adım rehber üretir. Kayıt ve dışa aktarma yerel bilgisayarında gerçekleşir; hesap veya ücretli API gerekmez. Windows ve Ubuntu Linux için 0.1.0 önizleme paketleri CI'da kabul testlerini geçti. 1.0.0 adayı henüz yayımlanmadı ve aynı paket testlerinden geçmesi bekleniyor. [İndirmeler: GitHub Releases](https://github.com/Pastalikek65/demoforge/releases).
+DemoForge, tarayıcıdaki bir iş akışını kaydedip yeniden oynatır; gerçek video, GIF ve adım adım rehber üretir. Kayıt ve dışa aktarma yerel bilgisayarında gerçekleşir; hesap veya ücretli API gerekmez. 1.0.0 paketleri Windows x64 ve Ubuntu 24.04 x64 üzerinde temiz kurulum, kayıt, yeniden oynatma ve dört çıktı formatı için kabul testlerini geçti. [DemoForge 1.0.0 indir](https://github.com/Pastalikek65/demoforge/releases/tag/v1.0.0); arşivi açmadan önce sürümdeki `SHA256SUMS.txt` ile dosya özetini doğrula.
 
 Kaynak depodan çalıştırmak için Node.js 24 LTS ve libx264 destekli FFmpeg kur. FFmpeg PATH üzerinde değilse `DEMOFORGE_FFMPEG` ortam değişkenini tam dosya yoluna ayarla. Masaüstü paketini kullanıyorsan Node.js gerekmez; FFmpeg yine ayrıca kurulur.
 
