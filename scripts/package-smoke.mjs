@@ -7,6 +7,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { _electron as electron, chromium } from 'playwright';
+import { snapshotOwnedProcesses } from './linux-processes.mjs';
 
 const execFile = promisify(execFileCallback);
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -124,46 +125,43 @@ async function waitFor(window, predicate, description, timeoutMs = stepTimeoutMs
   throw new Error(`Timed out waiting for ${description}.${detail}`);
 }
 
+async function waitForProjectSave(window, filePath, description) {
+  const expectedName = path.basename(filePath);
+  await waitFor(window, async () => {
+    const notice = window.locator('.message-bar--notice');
+    const footer = window.locator('.status-footer');
+    const savedNotice = await notice.count() === 1 && (await notice.innerText()).trim() === `Saved ${expectedName}.`;
+    const savedFooter = (await footer.innerText()).includes(`Saved · ${expectedName}`);
+    return await isRegularFile(filePath) && (savedNotice || savedFooter);
+  }, description, operationTimeoutMs);
+}
+
 async function waitForLinuxWorkflowBrowserSandbox(mainProcessId, signal, timeoutMs = operationTimeoutMs) {
   const deadline = Date.now() + timeoutMs;
   let observedBrowser = false;
+  let lastBrowserProcesses = [];
   while (!signal.aborted && Date.now() < deadline) {
-    const descendants = [];
-    const pending = [mainProcessId];
-    const visited = new Set();
-    while (pending.length > 0) {
-      const pid = pending.shift();
-      if (visited.has(pid)) continue;
-      visited.add(pid);
-      try {
-        const [command, commandLine, childIds] = await Promise.all([
-          readFile(`/proc/${pid}/comm`, 'utf8'),
-          readFile(`/proc/${pid}/cmdline`),
-          readFile(`/proc/${pid}/task/${pid}/children`, 'utf8'),
-        ]);
-        const entry = {
-          pid,
-          command: command.trim(),
-          args: commandLine.toString('utf8').split('\0').filter(Boolean),
-        };
-        descendants.push(entry);
-        pending.push(...childIds.trim().split(/\s+/).filter(Boolean).map(Number));
-      } catch (error) {
-        if (error?.code !== 'ENOENT') throw error;
-      }
-    }
-    const chromeProcesses = descendants.filter((entry) => /^chrome(?:-headless-shell)?$/i.test(entry.command));
+    const descendants = await snapshotOwnedProcesses(mainProcessId);
+    const chromeProcesses = descendants.filter((entry) => /chrome/i.test(entry.comm)
+      || /^chrome(?:-headless-shell)?(?:\.exe)?$/i.test(path.basename(entry.args[0] ?? '')));
     if (chromeProcesses.length > 0) observedBrowser = true;
-    const unsafeFlags = [...new Set(chromeProcesses.flatMap((entry) => entry.args.filter((argument) => argument === '--no-sandbox' || argument === '--disable-setuid-sandbox')))];
+    const diagnosticFlags = new Set([
+      '--no-sandbox', '--disable-setuid-sandbox', '--disable-seccomp-filter-sandbox',
+      '--disable-namespace-sandbox', '--disable-renderer-sandbox',
+    ]);
+    const unsafeFlags = [...new Set(chromeProcesses.flatMap((entry) => entry.args.filter((argument) => diagnosticFlags.has(argument))))];
     assert.deepEqual(unsafeFlags, [], 'the packaged replay Chromium must not disable its Linux sandbox');
-    const renderer = chromeProcesses.find((entry) => entry.args.includes('--type=renderer'));
+    const safeRoleFlags = new Set(['--type=renderer', '--type=zygote', '--type=gpu-process', '--type=utility', '--type=broker']);
+    const renderer = chromeProcesses.find((entry) => entry.args.includes('--type=renderer') || /renderer/i.test(entry.comm));
+    lastBrowserProcesses = chromeProcesses.slice(0, 80).map((entry) => ({
+      pid: entry.pid,
+      parentPid: entry.parentPid,
+      comm: entry.comm,
+      roleFlags: entry.args.filter((argument) => safeRoleFlags.has(argument)),
+      seccompMode: entry.seccompMode,
+    }));
     if (renderer) {
-      const status = await readFile(`/proc/${renderer.pid}/status`, 'utf8').catch((error) => {
-        if (error?.code === 'ENOENT') return '';
-        throw error;
-      });
-      const seccomp = Number(status.match(/^Seccomp:\s+(\d+)$/m)?.[1] ?? 0);
-      if (seccomp === 2) {
+      if (renderer.seccompMode === 2) {
         const namespaces = {};
         for (const namespace of ['user', 'pid', 'mnt', 'net']) {
           try { namespaces[namespace] = await readlink(`/proc/${renderer.pid}/ns/${namespace}`); }
@@ -172,8 +170,13 @@ async function waitForLinuxWorkflowBrowserSandbox(mainProcessId, signal, timeout
         return {
           observed: true,
           processScope: 'descendants of the packaged Electron main PID only',
-          browserCommand: renderer.command,
-          rendererSeccompMode: seccomp,
+          renderer: {
+            pid: renderer.pid,
+            parentPid: renderer.parentPid,
+            comm: renderer.comm,
+            roleFlags: renderer.args.filter((argument) => safeRoleFlags.has(argument)),
+            seccompMode: renderer.seccompMode,
+          },
           namespaces,
           forbiddenSandboxFlags: unsafeFlags,
         };
@@ -182,7 +185,22 @@ async function waitForLinuxWorkflowBrowserSandbox(mainProcessId, signal, timeout
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   if (signal.aborted) throw new Error('Linux replay browser sandbox observation was canceled.');
-  throw new Error(`Could not observe an app-owned workflow Chromium renderer with seccomp mode 2 (saw browser process: ${observedBrowser}).`);
+  throw new Error(`Could not observe an app-owned workflow Chromium renderer with seccomp mode 2 (saw browser process: ${observedBrowser}); last safe process snapshot: ${JSON.stringify(lastBrowserProcesses)}.`);
+}
+
+async function inspectLinuxRendererSandbox(processId, description) {
+  assert.ok(Number.isSafeInteger(processId) && processId > 0, `${description} should have a valid operating-system PID`);
+  let status;
+  try { status = await readFile(`/proc/${processId}/status`, 'utf8'); }
+  catch (error) { throw new Error(`Could not inspect ${description} process status (${error?.code ?? 'unknown error'}); Linux sandbox evidence is unavailable.`); }
+  const seccompMode = Number(status.match(/^Seccomp:\s+(\d+)$/m)?.[1] ?? 0);
+  assert.equal(seccompMode, 2, `${description} must have Linux seccomp filters active`);
+  const namespaces = {};
+  for (const namespace of ['user', 'pid', 'mnt', 'net']) {
+    try { namespaces[namespace] = await readlink(`/proc/${processId}/ns/${namespace}`); }
+    catch (error) { throw new Error(`Could not inspect the ${namespace} namespace for ${description} (${error?.code ?? 'unknown error'}).`); }
+  }
+  return { processId, seccompMode, namespaces };
 }
 
 function deferred() {
@@ -437,6 +455,7 @@ async function editProjectThroughUi(window, routes) {
   await waitFor(window, async () => (await captions.locator('.layer-list li').count()) === 1, 'the synthetic subtitle to be added');
 
   await window.getByRole('button', { name: 'Save project', exact: true }).click();
+  await waitForProjectSave(window, routes.savedProject, 'the editor to finish saving the edited project');
   const saved = JSON.parse(await readFile(routes.savedProject, 'utf8'));
   assert.equal(saved.edits.masks.length, 1, 'the saved project should preserve the opaque mask');
   assert.equal(saved.edits.annotations[0]?.text, 'Synthetic package acceptance caption', 'the saved project should preserve the caption');
@@ -477,7 +496,7 @@ async function recordAndReplayWorkflowThroughUi(window, routes, recordingUrl, re
   }
 
   await window.getByRole('button', { name: 'Save project', exact: true }).click();
-  await waitFor(window, () => isRegularFile(routes.recordedProject), 'the recorded project to be saved');
+  await waitForProjectSave(window, routes.recordedProject, 'the editor to finish saving the recorded project');
   const serializedProject = await readFile(routes.recordedProject, 'utf8');
   const recordedProject = JSON.parse(serializedProject);
   const actions = recordedProject.steps.map((step) => step.action);
@@ -728,6 +747,10 @@ async function runSmoke(options) {
       window = await application.firstWindow();
       await window.waitForLoadState('domcontentloaded', { timeout: 30_000 });
       await window.getByRole('heading', { name: 'Step sequence' }).waitFor({ state: 'visible', timeout: 30_000 });
+      if (process.platform === 'linux') {
+        const rendererProcessId = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.webContents.getOSProcessId());
+        appInfo.editorRendererSandbox = await inspectLinuxRendererSandbox(rendererProcessId, 'the packaged Electron renderer');
+      }
       const boundary = await window.evaluate(() => ({ nodeIntegration: typeof window.require, api: Object.keys(window.demoforge ?? {}) }));
       assert.equal(boundary.nodeIntegration, 'undefined', 'the installed editor should keep Node integration disabled');
       assert.ok(boundary.api.includes('openProject') && boundary.api.includes('saveProject') && boundary.api.includes('replay') && boundary.api.includes('getPreview') && boundary.api.includes('export'), 'the installed editor should expose the constrained desktop bridge');
@@ -769,7 +792,7 @@ async function runSmoke(options) {
       result: 'passed',
       platform: process.platform,
       appIsPackaged: appInfo.isPackaged,
-      chromiumSandbox: { noSandboxSwitch: appInfo.noSandboxSwitch, rendererEnabled: appInfo.rendererSandbox },
+      chromiumSandbox: { noSandboxSwitch: appInfo.noSandboxSwitch, rendererEnabled: appInfo.rendererSandbox, ...(appInfo.editorRendererSandbox ? { editorRenderer: appInfo.editorRendererSandbox } : {}) },
       executable: path.basename(executablePath),
       ffmpegExecutable: path.basename(ffmpegPath),
       externalBrowserSetupPassed: true,

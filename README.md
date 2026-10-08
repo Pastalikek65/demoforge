@@ -1,5 +1,7 @@
 # DemoForge
 
+[![CI](https://github.com/Pastalikek65/demoforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Pastalikek65/demoforge/actions/workflows/ci.yml)
+
 Record a browser workflow once. Replay it and produce video demos and step-by-step guides on your own computer.
 
 **In development · public source MVP.** No v1 release or Linux package validation yet. DemoForge is for maintainers, support teams and developers who need to refresh demos when their web application changes.
@@ -65,6 +67,6 @@ npm run build
 npm test
 ```
 
-Media tests require FFmpeg. Desktop tests require built assets and a display (Linux: Xvfb). Windows x64 is under local test; Linux x64 remains pending CI/package evidence. See [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [contributing](CONTRIBUTING.md), [security](SECURITY.md), and [Türkçe hızlı başlangıç](docs/quickstart.tr.md).
+Media tests require FFmpeg. Desktop tests require built assets and a display (Linux: Xvfb). See the [tested platform matrix](docs/support.md), [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [contributing](CONTRIBUTING.md), [security](SECURITY.md), and [Türkçe hızlı başlangıç](docs/quickstart.tr.md).
 
 Licensed under Apache-2.0. No telemetry or upload backend.
