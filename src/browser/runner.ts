@@ -10,6 +10,64 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 120_000;
 const MAX_LOCATOR_LENGTH = 2_048;
 const DEFAULT_VIEWPORT = { width: 1280, height: 720 };
+const screenshotFsErrorCodes = new Set(['EACCES', 'EBUSY', 'EEXIST', 'EIO', 'EISDIR', 'ENOSPC', 'ENOTDIR', 'ENOENT', 'EPERM', 'EROFS']);
+
+export type ScreenshotFailureOperation = 'MKDIR' | 'CAPTURE';
+export type ScreenshotFailureCause =
+  | 'CAPTURE_REJECTED' | 'EMPTY_VIEWPORT' | 'PAGE_CLOSED' | 'TARGET_CLOSED' | 'TARGET_CRASHED'
+  | 'TIMEOUT' | 'FS_EACCES' | 'FS_EBUSY' | 'FS_EEXIST' | 'FS_EIO' | 'FS_EISDIR' | 'FS_ENOSPC' | 'FS_ENOTDIR'
+  | 'FS_ENOENT' | 'FS_EPERM' | 'FS_EROFS' | 'OTHER';
+
+export interface ScreenshotFailureDiagnostic {
+  operation: ScreenshotFailureOperation;
+  cause: ScreenshotFailureCause;
+  viewport: string;
+}
+
+function readErrorField(error: unknown, field: string): string | undefined {
+  if ((typeof error !== 'object' && typeof error !== 'function') || error === null) return undefined;
+  try {
+    const value: unknown = Reflect.get(error, field);
+    return typeof value === 'string' ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function safeViewport(viewport: { width: number; height: number } | null | undefined): string {
+  if (!viewport || !Number.isInteger(viewport.width) || !Number.isInteger(viewport.height)
+    || viewport.width < 0 || viewport.height < 0 || viewport.width > 99_999 || viewport.height > 99_999) {
+    return 'unavailable';
+  }
+  return `${viewport.width}x${viewport.height}`;
+}
+
+export function classifyScreenshotFailure(
+  error: unknown,
+  operation: ScreenshotFailureOperation,
+  pageClosed: boolean,
+  viewport: { width: number; height: number } | null | undefined,
+): ScreenshotFailureDiagnostic {
+  const dimensions = safeViewport(viewport);
+  const code = readErrorField(error, 'code');
+  const errorName = readErrorField(error, 'name');
+  const message = readErrorField(error, 'message') ?? '';
+  let cause: ScreenshotFailureCause = 'OTHER';
+
+  if (code && screenshotFsErrorCodes.has(code)) cause = `FS_${code}` as ScreenshotFailureCause;
+  else if (/\bTarget crashed\b/i.test(message)) cause = 'TARGET_CRASHED';
+  else if (pageClosed) cause = 'PAGE_CLOSED';
+  else if (errorName === 'TargetClosedError' || /\b(?:Target closed|Page closed|Target page, context or browser has been closed)\b/i.test(message)) cause = 'TARGET_CLOSED';
+  else if (errorName === 'TimeoutError' || /\bTimeout \d+ms exceeded\b/i.test(message)) cause = 'TIMEOUT';
+  else if (operation === 'CAPTURE' && viewport && (viewport.width <= 0 || viewport.height <= 0)) cause = 'EMPTY_VIEWPORT';
+  else if (operation === 'CAPTURE' && /\bUnable to capture screenshot\b/i.test(message)) cause = 'CAPTURE_REJECTED';
+
+  return { operation, cause, viewport: dimensions };
+}
+
+export function formatScreenshotFailure(stepId: string, diagnostic: ScreenshotFailureDiagnostic): string {
+  return `SCREENSHOT_FAILED: ${stepId} (operation=${diagnostic.operation}; cause=${diagnostic.cause}; viewport=${diagnostic.viewport})`;
+}
 
 function clampTimeout(value: number): number {
   if (!Number.isFinite(value) || value < 1) return DEFAULT_TIMEOUT_MS;
@@ -153,21 +211,40 @@ export async function replay(project: Project, options: ReplayOptions): Promise<
       endMs: Math.max(0, Date.now() - startedAtMs),
       ...(error ? { error } : {}),
     };
-    let screenshotFailed = false;
+    let screenshotFailure: ScreenshotFailureDiagnostic | undefined;
     if (page && status !== 'not-run') {
       try {
         const file = screenshotPath(outputDir, step.id, index);
-        await mkdir(dirname(file), { recursive: true });
-        await page.screenshot({ path: file, timeout: 5_000, animations: 'disabled' });
-        result.screenshot = file;
-      } catch { screenshotFailed = true; }
+        let viewport: { width: number; height: number } | null | undefined;
+        try { viewport = page.viewportSize(); } catch { /* Keep the capture path independent of diagnostic reads. */ }
+        let pageClosed = false;
+        try { pageClosed = page.isClosed(); } catch { /* Keep diagnostics limited to known page state. */ }
+        try {
+          await mkdir(dirname(file), { recursive: true });
+        } catch (error) {
+          screenshotFailure = classifyScreenshotFailure(error, 'MKDIR', pageClosed, viewport);
+        }
+        if (!screenshotFailure) {
+          try {
+            await page.screenshot({ path: file, timeout: 5_000, animations: 'disabled' });
+            result.screenshot = file;
+          } catch (error) {
+            let closedAfterFailure = pageClosed;
+            try { closedAfterFailure = page.isClosed(); } catch { /* Retain the last known state. */ }
+            screenshotFailure = classifyScreenshotFailure(error, 'CAPTURE', closedAfterFailure, viewport);
+          }
+        }
+      } catch (error) {
+        // Path construction or viewport inspection failed before I/O; do not expose its details.
+        screenshotFailure = classifyScreenshotFailure(error, 'MKDIR', false, undefined);
+      }
     }
     if (status === 'passed' && options.signal?.aborted) {
       result.status = 'failed';
       result.error = `CANCELLED: ${step.id}`;
-    } else if (status === 'passed' && screenshotFailed) {
+    } else if (status === 'passed' && screenshotFailure) {
       result.status = 'failed';
-      result.error = `SCREENSHOT_FAILED: ${step.id}`;
+      result.error = formatScreenshotFailure(step.id, screenshotFailure);
     }
     results[index] = result;
     notify(result);

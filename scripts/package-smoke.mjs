@@ -22,6 +22,11 @@ const safeReplayErrorCodes = new Set([
   'URL_VARIABLE_REQUIRED', 'URL_VARIABLE_UNDECLARED', 'VALUE_REQUIRED', 'VARIABLE_REQUIRED',
   'VARIABLE_UNDECLARED', 'ACTION_UNSUPPORTED',
 ]);
+const safeScreenshotOperations = new Set(['MKDIR', 'CAPTURE']);
+const safeScreenshotCauses = new Set([
+  'CAPTURE_REJECTED', 'EMPTY_VIEWPORT', 'PAGE_CLOSED', 'TARGET_CLOSED', 'TARGET_CRASHED', 'TIMEOUT',
+  'FS_EACCES', 'FS_EBUSY', 'FS_EEXIST', 'FS_EIO', 'FS_EISDIR', 'FS_ENOSPC', 'FS_ENOTDIR', 'FS_ENOENT', 'FS_EPERM', 'FS_EROFS', 'OTHER',
+]);
 const readOwnedNamespaceLinks = createLinuxNamespaceObserver({ mode: linuxNamespaceObserverMode });
 
 function usage() {
@@ -587,6 +592,14 @@ export function classifyReplayErrorCode(errorText) {
   return match && safeReplayErrorCodes.has(match[1]) ? match[1] : 'UNCLASSIFIED';
 }
 
+export function classifyReplayErrorDetails(errorText) {
+  const errorCode = classifyReplayErrorCode(errorText);
+  if (errorCode !== 'SCREENSHOT_FAILED' || typeof errorText !== 'string') return { errorCode };
+  const match = /^SCREENSHOT_FAILED:[^(\r\n]* \(operation=(MKDIR|CAPTURE); cause=([A-Z_]+); viewport=(unavailable|(?:0|[1-9]\d{0,4})x(?:0|[1-9]\d{0,4}))\)$/.exec(errorText.trim());
+  if (!match || !safeScreenshotOperations.has(match[1]) || !safeScreenshotCauses.has(match[2])) return { errorCode };
+  return { errorCode, screenshotDiagnostic: { operation: match[1], cause: match[2], viewport: match[3] } };
+}
+
 export function classifyReplayUiState(status, rowStatuses, expectedStepCount) {
   const safeStatus = new Set(['Passed', 'Failed', 'Running', 'Ready']).has(status) ? status : 'Unknown';
   const counts = { passedCount: 0, failedCount: 0, notRunCount: 0 };
@@ -596,9 +609,23 @@ export function classifyReplayUiState(status, rowStatuses, expectedStepCount) {
     if (rowStatus === 'passed') counts.passedCount += 1;
     else if (rowStatus === 'failed') {
       counts.failedCount += 1;
-      const candidate = typeof row === 'object' && row ? row.errorCode : undefined;
+      const rowDetails = typeof row === 'object' && row ? row : undefined;
+      const candidate = rowDetails?.errorCode;
       const errorCode = candidate === 'UNCLASSIFIED' || safeReplayErrorCodes.has(candidate) ? candidate : 'UNCLASSIFIED';
-      failedSteps.push({ step: index + 1, errorCode });
+      const screenshot = rowDetails?.screenshotDiagnostic;
+      const hasSafeScreenshotDiagnostic = errorCode === 'SCREENSHOT_FAILED'
+        && safeScreenshotOperations.has(screenshot?.operation)
+        && safeScreenshotCauses.has(screenshot?.cause)
+        && (screenshot?.viewport === 'unavailable' || /^(?:0|[1-9]\d{0,4})x(?:0|[1-9]\d{0,4})$/.test(screenshot?.viewport ?? ''));
+      failedSteps.push({
+        step: index + 1,
+        errorCode,
+        ...(hasSafeScreenshotDiagnostic ? { screenshotDiagnostic: {
+          operation: screenshot.operation,
+          cause: screenshot.cause,
+          viewport: screenshot.viewport,
+        } } : {}),
+      });
     } else if (rowStatus === 'not-run') counts.notRunCount += 1;
   }
   const summary = { status: safeStatus, rowCount: rowStatuses.length, ...counts, failedSteps };
@@ -640,17 +667,21 @@ export async function waitForReplayCompletion(window, expectedStepCount, descrip
     }));
     const rowStatuses = rowDetails.map(({ status, errorText }) => ({
       status,
-      errorCode: status === 'failed' ? classifyReplayErrorCode(errorText) : undefined,
+      ...(status === 'failed' ? classifyReplayErrorDetails(errorText) : {}),
     }));
     lastState = classifyReplayUiState(status, rowStatuses, expectedStepCount);
     if (lastState.state === 'passed') return lastState;
     if (lastState.state === 'failed') {
-      const failedSteps = lastState.failedSteps.map(({ step, errorCode }) => `${step}:${errorCode}`).join(',') || 'unknown';
+      const failedSteps = lastState.failedSteps.map(({ step, errorCode, screenshotDiagnostic }) => screenshotDiagnostic
+        ? `${step}:${errorCode}/${screenshotDiagnostic.operation}/${screenshotDiagnostic.cause}/${screenshotDiagnostic.viewport}`
+        : `${step}:${errorCode}`).join(',') || 'unknown';
       throw new Error(`Replay failure evidence (heading=${lastState.status}, rows=${lastState.rowCount}, failed steps=${failedSteps}, not-run=${lastState.notRunCount}); raw step details are withheld.`);
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  const failedSteps = lastState.failedSteps.map(({ step, errorCode }) => `${step}:${errorCode}`).join(',') || 'none';
+  const failedSteps = lastState.failedSteps.map(({ step, errorCode, screenshotDiagnostic }) => screenshotDiagnostic
+    ? `${step}:${errorCode}/${screenshotDiagnostic.operation}/${screenshotDiagnostic.cause}/${screenshotDiagnostic.viewport}`
+    : `${step}:${errorCode}`).join(',') || 'none';
   throw new Error(`Timed out waiting for ${description} after ${timeoutMs} ms (last status=${lastState.status}, rows=${lastState.rowCount}, failed steps=${failedSteps}, not-run=${lastState.notRunCount}).`);
 }
 

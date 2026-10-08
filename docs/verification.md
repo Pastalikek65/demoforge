@@ -11,7 +11,20 @@ Commit `337e333`, GitHub Actions run [37820720332](https://github.com/Pastalikek
 | [Windows x64, job 113460751207](https://github.com/Pastalikek65/demoforge/actions/runs/37820720332/job/113460751207) | **157/157 tests across 27 files** passed. | Fresh package launch and browser setup, actual UI recording and replay, masked/captioned exports in MP4, GIF, Markdown and HTML, and reopening generated outputs passed. |
 | [Ubuntu 24.04 x64, job 113460751037](https://github.com/Pastalikek65/demoforge/actions/runs/37820720332/job/113460751037) | **156 passed and one Windows-only test skipped**, across 27 files. | Packaged recording and replay passed. The harness identified the workflow renderer, observed Seccomp mode 2 and namespace metadata, checked masks and captions in all four formats, and reopened the outputs. |
 
-These results qualify the tested 0.1.0 preview archives only. Their SHA-256 values are omitted until the archives are independently downloaded and hashed. Local retained job logs are `.control/windows-ci-337-pass.log` and `.control/linux-ci-337-pass.log`.
+These results qualify the tested 0.1.0 preview archives only. Both artifacts were independently downloaded and hashed; their inner archive checksums match the CI manifests and uploaded draft assets:
+
+| Archive | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `DemoForge-0.1.0-win-x64.zip` | 161285951 | `71534b8c1d5733fca66771da205130a456f65a0003cc0d7b0f7f5272a468cb63` |
+| `DemoForge-0.1.0-linux-x64.tar.gz` | 126943399 | `3923d9eab8278131f1d99706218b551db8fe159079c455844167f2586f9b0a81` |
+
+The preview release remains a draft. Local retained job logs are `.control/windows-ci-337-pass.log` and `.control/linux-ci-337-pass.log`.
+
+## Current candidate failure
+
+At candidate `77a25d2`, run [37822691803](https://github.com/Pastalikek65/demoforge/actions/runs/37822691803) passed Windows package acceptance but timed out replaying the recorded workflow on Linux. Diagnostic-only commit `34fd77f`, run [37824875571](https://github.com/Pastalikek65/demoforge/actions/runs/37824875571), reproduced the Linux failure: the first navigation action completed, its screenshot failed, and four subsequent actions were not run. Windows again passed package acceptance. The Linux source suite passed 161 tests with one Windows-only skip; Windows passed 162 tests across 28 files.
+
+The screenshot exception's underlying cause is not yet known. Safe cause diagnostics are being added; capture behavior and the exact all-passed acceptance checks remain unchanged. This failure blocks stable release. Earlier preview successes do not close it.
 
 ## Source and behavior evidence
 

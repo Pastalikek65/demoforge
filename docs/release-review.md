@@ -7,7 +7,7 @@ Scope includes masking and export filters, secret URL and form variables, workfl
 
 ## Source findings
 
-No source finding remains open in the reviewed committed baseline. Four earlier P2 findings are closed:
+The reviewed baseline's earlier source findings are closed. A subsequent Linux candidate package replay fails at its first screenshot; the cause remains under investigation and blocks stable release. See the [current failure evidence](verification.md#current-candidate-failure). Four earlier P2 findings are closed:
 
 - **Run/workflow mismatch:** run reports include a SHA-256 fingerprint of replay behavior. Validation checks the fingerprint and ordered step IDs. Presentation-only edits do not invalidate a run; replay changes do.
 - **Secret URL persistence:** recognized sensitive query keys, OAuth `code`, and sensitive fragment/query-route keys are detected. Recording stores those URLs as runtime-variable references. Project parsing rejects recognized sensitive literal URLs with a constant, actionable error that does not echo the value. The detector remains heuristic.
@@ -32,7 +32,7 @@ The candidate updates package and lock metadata to 1.0.0 and Node.js 24 LTS with
 
 - Commit `337e333`, GitHub Actions run [37820720332](https://github.com/Pastalikek65/demoforge/actions/runs/37820720332): Windows job [113460751207](https://github.com/Pastalikek65/demoforge/actions/runs/37820720332/job/113460751207) passed **157/157 tests across 27 files** and fresh extracted-package acceptance for browser setup, recording/replay, masked and captioned MP4/GIF/Markdown/HTML, and output reopening.
 - Linux job [113460751037](https://github.com/Pastalikek65/demoforge/actions/runs/37820720332/job/113460751037) passed **156 tests with one Windows-only skip across 27 files** and fresh package acceptance. The harness observed the packaged workflow renderer, Seccomp mode 2 and namespace metadata during record/replay, checked the four export formats and reopened the outputs.
-- These results qualify the tested 0.1.0 preview archives only. Their SHA-256 values are pending independent archive download and hashing. The 1.0.0 candidate requires fresh CI against its exact versioned archives; those results must not be inferred from this run.
+- These results qualify the tested 0.1.0 preview archives only. Independent downloads, hashes and embedded license copies were verified; checksums are recorded in [verification evidence](verification.md). Later 1.0.0 Windows packages passed acceptance, but the Linux screenshot failure remains open; stable acceptance must not be inferred from the preview run.
 - Manual audio-editor evidence is from the unpackaged source editor; local retained text evidence is `artifacts/screenshots/audio-timeline-evidence.txt`. Earlier focused regressions passed after the fix; this does not qualify an archive.
 
 The current archives are unsigned. The CLI is documented for source-checkout installation with Node.js 24 LTS. Version-1 format fixtures and the first stable installation experience remain to verify before 1.0.0 release. See [verification evidence](verification.md) and [platform support](support.md) for current qualification boundaries.
