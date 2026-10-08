@@ -1136,6 +1136,20 @@ summary:focus-visible {
 .track-bar--caption { background: #7396e7; }
 .track-bar--zoom { background: #d59a54; }
 
+.track-marker {
+  position: absolute;
+  top: 1px;
+  display: block;
+  width: 2px;
+  height: 15px;
+  transform: translateX(-50%);
+}
+
+.track-marker--audio {
+  background: #c26a3c;
+  box-shadow: 0 0 0 2px rgb(194 106 60 / 15%);
+}
+
 .track-empty {
   padding-left: 7px;
   color: #a19e95;

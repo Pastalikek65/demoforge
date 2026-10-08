@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFile as execFileCallback } from 'node:child_process';
 import { createServer } from 'node:http';
-import { access, lstat, mkdir, mkdtemp, readFile, readlink, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { access, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { _electron as electron, chromium } from 'playwright';
+import { createLinuxNamespaceObserver, linuxNamespaceObserverMode } from './linux-namespace-observer.mjs';
 import { snapshotOwnedProcesses } from './linux-processes.mjs';
 
 const execFile = promisify(execFileCallback);
@@ -15,6 +16,7 @@ const projectRoot = path.resolve(scriptDirectory, '..');
 const stepTimeoutMs = 10_000;
 const operationTimeoutMs = 120_000;
 const browserSetupTimeoutMs = 660_000;
+const readOwnedNamespaceLinks = createLinuxNamespaceObserver({ mode: linuxNamespaceObserverMode });
 
 function usage() {
   return 'Usage: node scripts/package-smoke.mjs <absolute-path-to-DemoForge-executable> [--ffmpeg <absolute-path-to-ffmpeg>]';
@@ -162,11 +164,7 @@ async function waitForLinuxWorkflowBrowserSandbox(mainProcessId, signal, timeout
     }));
     if (renderer) {
       if (renderer.seccompMode === 2) {
-        const namespaces = {};
-        for (const namespace of ['user', 'pid', 'mnt', 'net']) {
-          try { namespaces[namespace] = await readlink(`/proc/${renderer.pid}/ns/${namespace}`); }
-          catch (error) { if (error?.code !== 'ENOENT') throw error; }
-        }
+        const namespaces = await readOwnedNamespaceLinks(descendants, mainProcessId, renderer.pid);
         return {
           observed: true,
           processScope: 'descendants of the packaged Electron main PID only',
@@ -188,18 +186,16 @@ async function waitForLinuxWorkflowBrowserSandbox(mainProcessId, signal, timeout
   throw new Error(`Could not observe an app-owned workflow Chromium renderer with seccomp mode 2 (saw browser process: ${observedBrowser}); last safe process snapshot: ${JSON.stringify(lastBrowserProcesses)}.`);
 }
 
-async function inspectLinuxRendererSandbox(processId, description) {
+async function inspectLinuxRendererSandbox(processId, description, mainProcessId) {
   assert.ok(Number.isSafeInteger(processId) && processId > 0, `${description} should have a valid operating-system PID`);
+  assert.ok(Number.isSafeInteger(mainProcessId) && mainProcessId > 0, 'the packaged Electron main process should have a valid operating-system PID');
   let status;
   try { status = await readFile(`/proc/${processId}/status`, 'utf8'); }
   catch (error) { throw new Error(`Could not inspect ${description} process status (${error?.code ?? 'unknown error'}); Linux sandbox evidence is unavailable.`); }
   const seccompMode = Number(status.match(/^Seccomp:\s+(\d+)$/m)?.[1] ?? 0);
   assert.equal(seccompMode, 2, `${description} must have Linux seccomp filters active`);
-  const namespaces = {};
-  for (const namespace of ['user', 'pid', 'mnt', 'net']) {
-    try { namespaces[namespace] = await readlink(`/proc/${processId}/ns/${namespace}`); }
-    catch (error) { throw new Error(`Could not inspect the ${namespace} namespace for ${description} (${error?.code ?? 'unknown error'}).`); }
-  }
+  const processSnapshot = await snapshotOwnedProcesses(mainProcessId);
+  const namespaces = await readOwnedNamespaceLinks(processSnapshot, mainProcessId, processId);
   return { processId, seccompMode, namespaces };
 }
 
@@ -718,6 +714,7 @@ async function runSmoke(options) {
     const environment = Object.fromEntries(Object.entries(process.env).filter((entry) => typeof entry[1] === 'string'));
     delete environment.ELECTRON_RUN_AS_NODE;
     delete environment.electron_run_as_node;
+    delete environment.DEMOFORGE_LINUX_NAMESPACE_OBSERVER;
     environment.DEMOFORGE_FFMPEG = ffmpegPath;
     environment.APPDATA = appData;
     environment.LOCALAPPDATA = appLocalData;
@@ -750,7 +747,7 @@ async function runSmoke(options) {
       await window.getByRole('heading', { name: 'Step sequence' }).waitFor({ state: 'visible', timeout: 30_000 });
       if (process.platform === 'linux') {
         const rendererProcessId = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.webContents.getOSProcessId());
-        appInfo.editorRendererSandbox = await inspectLinuxRendererSandbox(rendererProcessId, 'the packaged Electron renderer');
+        appInfo.editorRendererSandbox = await inspectLinuxRendererSandbox(rendererProcessId, 'the packaged Electron renderer', appInfo.mainProcessId);
       }
       const boundary = await window.evaluate(() => ({ nodeIntegration: typeof window.require, api: Object.keys(window.demoforge ?? {}) }));
       assert.equal(boundary.nodeIntegration, 'undefined', 'the installed editor should keep Node integration disabled');

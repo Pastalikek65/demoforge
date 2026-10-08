@@ -6,6 +6,7 @@
 - Navigation, click, text input, select and wait steps; strict version-one project files.
 - Real browser video, screenshots, MP4/GIF and offline Markdown/HTML guides.
 - Permanent temporal masks, trim/crop, annotations/subtitles, zoom, cursor emphasis, and supplied audio.
+- Audio settings restored when opening projects, with an accessible timeline start marker.
 - Runtime secret references, replay fingerprints, cancellation and controlled step failures.
 - Explicit vendor browser setup with system TLS trust and owned installer cleanup; sandboxed workflow Chromium.
 - Synthetic shop example, English documentation and Turkish quickstart.

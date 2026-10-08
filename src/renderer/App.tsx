@@ -71,6 +71,14 @@ function numericInput(value: string) {
   return value === '' ? 0 : Number(value);
 }
 
+function audioDraftFor(audio: Project['edits']['audio']) {
+  return {
+    file: audio?.file ?? '',
+    startMs: String(audio?.startMs ?? 0),
+    volume: String(audio?.volume ?? 1),
+  };
+}
+
 function isIntegerBetween(value: number, minimum: number, maximum: number) {
   return Number.isSafeInteger(value) && value >= minimum && value <= maximum;
 }
@@ -225,7 +233,7 @@ function App() {
       try {
         const initial = await desktopApi().newProject();
         if (active) {
-          setProject(initial);
+          replaceProject(initial);
           setSelectedStepId(initial.steps[0]?.id ?? '');
         }
       } catch (loadError) {
@@ -258,6 +266,11 @@ function App() {
     setDirty(true);
     setReviewed(false);
     setNotice('');
+  }
+
+  function replaceProject(next: Project) {
+    setProject(next);
+    setAudioDraft(audioDraftFor(next.edits.audio));
   }
 
   function updateStep(stepId: string, key: keyof Step, value: unknown) {
@@ -370,6 +383,7 @@ function App() {
   }
 
   function updateEdit<K extends keyof Project['edits']>(key: K, value: Project['edits'][K]) {
+    if (key === 'audio') setAudioDraft(audioDraftFor(value as Project['edits']['audio']));
     editProject((current) => {
       const edits = { ...current.edits };
       if (value === undefined) delete edits[key];
@@ -408,7 +422,7 @@ function App() {
     setNotice('');
     try {
       const next = await desktopApi().newProject();
-      setProject(next);
+      replaceProject(next);
       setProjectFile('');
       setSelectedStepId(next.steps[0]?.id ?? '');
       setDirty(false);
@@ -437,7 +451,7 @@ function App() {
         setNotice('Open canceled. Your current project is still here.');
         return;
       }
-      setProject(opened.project);
+      replaceProject(opened.project);
       setProjectFile(opened.file);
       setSelectedStepId(opened.project.steps[0]?.id ?? '');
       setDirty(false);
@@ -546,7 +560,7 @@ function App() {
     setNotice('');
     try {
       const captured = await desktopApi().stopRecording();
-      setProject(captured.project);
+      replaceProject(captured.project);
       setSelectedStepId(captured.project.steps[0]?.id ?? '');
       setDirty(true);
       setRecording(false);
@@ -743,6 +757,7 @@ function App() {
     10000,
     runResult?.durationMs ?? 0,
     project?.edits.trimEndMs ?? 0,
+    project?.edits.audio?.startMs ?? 0,
     ...(project?.edits.masks.map((mask) => mask.endMs) ?? []),
     ...(project?.edits.annotations.map((annotation) => annotation.endMs) ?? []),
     ...(project?.edits.zooms.map((zoom) => zoom.endMs) ?? []),
@@ -1025,6 +1040,7 @@ function App() {
                 <div className="track-row"><span>Privacy masks</span><div className="track-rail">{project.edits.masks.map((mask, index) => <span className="track-bar track-bar--mask" key={mask.id} style={trackStyle(mask.startMs, mask.endMs, timelineEnd)} title={`Mask ${index + 1}: ${formatTime(mask.startMs)} to ${formatTime(mask.endMs)}`} />)}{project.edits.masks.length === 0 && <span className="track-empty">No masks</span>}</div></div>
                 <div className="track-row"><span>Subtitles</span><div className="track-rail">{project.edits.annotations.map((annotation) => <span className="track-bar track-bar--caption" key={annotation.id} style={trackStyle(annotation.startMs, annotation.endMs, timelineEnd)} title={annotation.text} />)}{project.edits.annotations.length === 0 && <span className="track-empty">No subtitles</span>}</div></div>
                 <div className="track-row"><span>Zooms</span><div className="track-rail">{project.edits.zooms.map((zoom, index) => <span className="track-bar track-bar--zoom" key={`${zoom.startMs}-${zoom.endMs}-${index}`} style={trackStyle(zoom.startMs, zoom.endMs, timelineEnd)} title={`Zoom ${zoom.scale}×`} />)}{project.edits.zooms.length === 0 && <span className="track-empty">No zooms</span>}</div></div>
+                <div className="track-row"><span>Audio</span><div className="track-rail">{project.edits.audio ? <span className="track-marker track-marker--audio" role="img" aria-label={`${fileName(project.edits.audio.file)} starts at ${formatTime(project.edits.audio.startMs)} at ${Math.round(project.edits.audio.volume * 100)}% volume`} title={`${fileName(project.edits.audio.file)} · starts at ${formatTime(project.edits.audio.startMs)} · ${Math.round(project.edits.audio.volume * 100)}% volume`} style={{ left: `${Math.min(100, (project.edits.audio.startMs / timelineEnd) * 100)}%` }} /> : <span className="track-empty">No audio</span>}</div></div>
               </div>
             </section>
           </fieldset>
