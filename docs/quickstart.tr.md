@@ -1,8 +1,8 @@
 # Türkçe hızlı başlangıç
 
-DemoForge, tarayıcıdaki bir iş akışını kaydedip yeniden oynatır; gerçek video, GIF ve ekran görüntülü rehber üretir. Henüz geliştirme aşamasındadır; v1 yayımlanmamıştır.
+DemoForge, tarayıcıdaki bir iş akışını kaydedip yeniden oynatır; gerçek video, GIF ve adım adım rehber üretir. Kayıt ve dışa aktarma yerel bilgisayarında gerçekleşir; hesap veya ücretli API gerekmez. Windows ve Ubuntu Linux için 0.1.0 önizleme paketleri CI'da kabul testlerini geçti. 1.0.0 adayı henüz yayımlanmadı ve aynı paket testlerinden geçmesi bekleniyor. [İndirmeler: GitHub Releases](https://github.com/Pastalikek65/demoforge/releases).
 
-Node.js 22+ ve libx264 destekli FFmpeg kurulu olmalı. FFmpeg PATH üzerinde değilse `DEMOFORGE_FFMPEG` ortam değişkenini tam dosya yoluna ayarla.
+Kaynak depodan çalıştırmak için Node.js 24 LTS ve libx264 destekli FFmpeg kur. FFmpeg PATH üzerinde değilse `DEMOFORGE_FFMPEG` ortam değişkenini tam dosya yoluna ayarla. Masaüstü paketini kullanıyorsan Node.js gerekmez; FFmpeg yine ayrıca kurulur.
 
 ```sh
 npm ci
@@ -18,7 +18,7 @@ node dist/cli.js replay examples/shop/workflow.demoforge.json --output artifacts
 node dist/cli.js export examples/shop/workflow.demoforge.json --run artifacts/shop-run/run.json --output artifacts/shop-demo --reviewed
 ```
 
-`artifacts/shop-demo/guide.html` dosyasını ve videoları aç. Masaüstü editör için `npm start` kullan. İş akışını ayrı tarayıcıda kaydet, editörden durdur, adımları düzenle ve yeniden oynat.
+`artifacts/shop-demo/guide.html` dosyasını ve videoları aç. Masaüstü editör için `npm start` kullan. İş akışını ayrı tarayıcıda kaydet, editörden durdur, adımları düzenle ve yeniden oynat. Paket kurulumunda ilk açılışta **Install browser** düğmesiyle Chromium'u indir; bu tek seferlik işlem internet bağlantısı gerektirir.
 
 Masaüstü paketini ilk açışında **Install browser** düğmesiyle resmi tarayıcı dosyalarını indir. Bu tek seferlik adım internet gerektirir; sonraki işlemler yerelde çalışır. FFmpeg ayrıca kurulur. Windows ZIP paketleri imzasızdır. Linux kurulumunda Electron sandbox yardımcısının sistem kurulumu gerekir; [paketleme rehberindeki](packaging.md) adımları izle.
 

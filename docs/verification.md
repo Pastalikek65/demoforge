@@ -1,20 +1,28 @@
 # Verification evidence
 
-Updated 2026-10-08. This record separates source checks from extracted-package acceptance. DemoForge has no stable v1 release; the release gate remains open.
+Updated 2026-10-08. DemoForge's tested 0.1.0 preview packages passed Windows and Ubuntu CI acceptance. The 1.0.0 candidate is not yet accepted or published; this record distinguishes the existing preview evidence from work required for the candidate.
 
-| Evidence | Result | Scope and limit |
+## Accepted 0.1.0 preview package run
+
+Commit `337e333`, GitHub Actions run [37820720332](https://github.com/Pastalikek65/demoforge/actions/runs/37820720332):
+
+| Platform job | Source checks | Extracted-package acceptance |
 | --- | --- | --- |
-| Final local Windows source snapshot | Typecheck, build, and `npm test` passed: **157/157 tests across 27 files** with real FFmpeg. Local retained log: `artifacts/source-acceptance-linux-parser-final.log`. | Includes the conservative title-parser correction; source and harness evidence only. |
-| Windows CI at [`8af92e0`](https://github.com/Pastalikek65/demoforge/actions/runs/37816359292) | **156/156 tests across 27 files** and freshly extracted archive smoke passed. ZIP SHA-256: `55f14e62dcb98e379d6cc695d1c2f2600aee77bf2d1cebd43b444769c8a37c75`. | Package acceptance applies to the tested Windows archive and commit, not to later local source edits. |
-| Linux CI at the same run | **155 passed, 1 Windows-only test skipped**; typecheck, build, audits, and archive generation passed. | Extracted-package smoke failed after 120 seconds because the harness saw app-owned Chromium processes with Seccomp mode 2 but could not identify a workflow renderer. Linux package acceptance remains open; see the [Actions run](https://github.com/Pastalikek65/demoforge/actions/runs/37816359292). |
-| Manual audio-editor source check | Opening synthetic project audio, changing start and volume, saving, and reopening preserved the values; the timeline showed the start marker. Local retained text evidence: `artifacts/screenshots/audio-timeline-evidence.txt`. | Unpackaged source editor only; this is not platform package acceptance. |
+| [Windows x64, job 113460751207](https://github.com/Pastalikek65/demoforge/actions/runs/37820720332/job/113460751207) | **157/157 tests across 27 files** passed. | Fresh package launch and browser setup, actual UI recording and replay, masked/captioned exports in MP4, GIF, Markdown and HTML, and reopening generated outputs passed. |
+| [Ubuntu 24.04 x64, job 113460751037](https://github.com/Pastalikek65/demoforge/actions/runs/37820720332/job/113460751037) | **156 passed and one Windows-only test skipped**, across 27 files. | Packaged recording and replay passed. The harness identified the workflow renderer, observed Seccomp mode 2 and namespace metadata, checked masks and captions in all four formats, and reopened the outputs. |
 
-The Linux smoke failure follows an earlier `EACCES` reading the renderer user-namespace link. The CI-only observer now uses a fixed `sudo -n /usr/bin/readlink` for validated namespace paths, and the latest run passed that stage. This only permits observation; namespace IDs are observations, not proof of separation, and it did not resolve renderer-role identification. The app ran as an ordinary user with Chromium sandboxing enabled. The observer's synthetic tests and source review are not Linux runtime acceptance.
+These results qualify the tested 0.1.0 preview archives only. Their SHA-256 values are omitted until the archives are independently downloaded and hashed. Local retained job logs are `.control/windows-ci-337-pass.log` and `.control/linux-ci-337-pass.log`.
 
-The audio-editor change had two focused regressions fail against the prior source (saved audio values were not loaded, and a draft survived project switching); both pass after the fix. Local manual source-editor evidence is available, but it does not qualify a packaged application. Independent review found no functional or privilege-boundary issue in the reviewed audio and observer changes.
+## Source and behavior evidence
 
-The title-parser regression is closed. Local retained evidence in `artifacts/linux-title-regression/result.log` records the expected forbidden-flag assertion against the `8af92e0` baseline (exit code 1) and a passing corrected implementation (exit code 0), including rejection of a quote-wrapped unsafe switch without raw-argv exposure. Independent review found no bypass. Chromium supplies a joined, unescaped title string rather than the original argument boundaries; quotes therefore make a title ambiguous and suppress renderer-role classification, while raw whitespace-token checks still surface forbidden switches. This conservative handling can false-reject titles. Observed workflow launches use pinned Chromium with no caller-controlled browser arguments, executable replacement, or channel selection; browser-sandbox tests cover forbidden launch options.
+The quote-wrapped forbidden-launch-flag regression reproduced against the earlier `8af92e0` snapshot and passed after the conservative parser correction. The independent source audit closed the bypass finding. Chromium provides an unescaped joined title string, so quote-bearing titles are treated as ambiguous and renderer-role classification is suppressed; raw whitespace-token checks still catch forbidden switches. This may false-reject titles. Observed workflow-browser launches use pinned Chromium without caller-controlled arguments, executable replacement, or channel selection; Chromium constructs the renderer type as its first switch. Raw argv is not exposed. Sandbox tests check forbidden launch options. Local retained regression evidence is `artifacts/linux-title-regression/result.log`.
 
-Both CI dependency audits passed in the latest run. The package audit reports eight moderate `sprintf-js` findings and no high or critical findings; this is a tool report, not a license-compliance conclusion. The Windows archive passed the corrected caption check. Earlier failures remain recorded in the referenced run logs; they are not current acceptance results.
+The manual audio-editor source check confirmed that synthetic audio settings survive save/reopen and the timeline displays the start marker. It used the unpackaged editor; local retained text evidence is `artifacts/screenshots/audio-timeline-evidence.txt`. It does not qualify a package.
 
-The CLI is documented for source-checkout installation. Before stable v1, version-1 format fixtures and the first stable installation experience still need verification. Linux package acceptance and stable-v1 acceptance remain open; a Linux package run for the updated parser is pending. Current and historical archive checksums are not interchangeable baselines. Archives are unsigned; checksums establish file identity, not publisher authenticity.
+Earlier Linux runs failed while reading namespace links or identifying the renderer. The 337e333 package run passed both stages. Namespace IDs remain observations, not proof of namespace separation. Both preview package runs kept the application running as an ordinary user with Chromium sandboxing enabled.
+
+## Remaining 1.0.0 candidate checks
+
+The current 1.0.0 candidate must pass fresh Windows and Linux CI acceptance using its exact versioned archives. Independently download and record each archive's SHA-256 before publishing. Verify version-1 format fixtures and the first stable installation experience before the stable release. The CLI is documented for source-checkout installation with Node.js 24 LTS.
+
+Current archives are unsigned. A checksum identifies file contents but is not a publisher signature. Package CI does not establish independent user pilots or production deployments.

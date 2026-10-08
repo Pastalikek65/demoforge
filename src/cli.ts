@@ -12,7 +12,8 @@ import { loadRun } from './core/run.js';
 import { validateVariables } from './electron/boundary.js';
 import type { RunResult, ExportOptions } from './shared/types.js';
 
-const program = new Command().name('demoforge').description('Record, replay and publish browser demos locally.').version('0.1.0');
+const packageMetadata = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+const program = new Command().name('demoforge').description('Record, replay and publish browser demos locally.').version(packageMetadata.version);
 program.command('doctor').description('Check local runtime, browser and media encoder.').action(async () => {
   const checks = await doctor(); stdout.write(JSON.stringify(checks, null, 2) + '\n'); if (checks.some(check => !check.ok)) process.exitCode = 1;
 });

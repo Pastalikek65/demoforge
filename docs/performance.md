@@ -2,10 +2,10 @@
 
 DemoForge's benchmark replays a 25-step synthetic shop checkout against an HTTP server bound to loopback, records a 1280×720 browser video and one screenshot per step, then exports MP4, GIF, Markdown, and HTML. Each browser action uses an 80 ms pause. The fixture and all inputs are local and synthetic; the card number is a test value.
 
-Run it from the repository root after building the app. On Windows, the measured run used the local FFmpeg executable through `DEMOFORGE_FFMPEG`:
+Run it from the repository root after building the app, using Node.js 24 LTS. On Windows, set `DEMOFORGE_FFMPEG` to the path of your own FFmpeg executable if it is not on `PATH`:
 
 ```powershell
-$env:DEMOFORGE_FFMPEG = 'C:\Users\mamid\AppData\Local\Programs\Python\Python312\Lib\site-packages\imageio_ffmpeg\binaries\ffmpeg-win-x86_64-v7.1.exe'
+$env:DEMOFORGE_FFMPEG = 'C:\path\to\ffmpeg.exe'
 npm run build
 node scripts/benchmark.mjs
 ```

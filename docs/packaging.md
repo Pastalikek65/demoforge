@@ -2,6 +2,8 @@
 
 DemoForge packages the Electron editor and its application files. It does not include the workflow Chromium browser or the export FFmpeg executable. On first launch, use **Install browser** in the local requirements panel. DemoForge runs its pinned Playwright installer and downloads the browser runtime into `browser-runtime` under Electron's per-user application data directory. An internet connection and valid system TLS certificates are required for this one-time setup; recordings, replay, and exports then run locally. The installer writes `install.log` in that runtime directory. The separate export FFmpeg must be installed on the machine and must support `libx264` and the `subtitles` filter. Set `DEMOFORGE_FFMPEG` to its absolute path when it is not available as `ffmpeg` on `PATH`.
 
+Build packages from a source checkout with Node.js 24 LTS. The Windows x64 and Ubuntu 24.04 x64 0.1.0 preview archives passed fresh package acceptance in [CI run 37820720332](https://github.com/Pastalikek65/demoforge/actions/runs/37820720332). The 1.0.0 candidate still needs fresh acceptance using its exact versioned archives; do not infer candidate acceptance from the preview run.
+
 On Linux, use an x64 machine with a working X11 or Wayland desktop session and the GTK, NSS, audio, and graphics shared libraries required by Electron and the downloaded Chromium version. The browser setup downloads Chromium but does not install operating-system packages. Playwright's Linux dependency list changes with its browser version; see the [official system-dependency instructions](https://playwright.dev/docs/browsers#install-system-dependencies), or run `npx playwright install-deps chromium` from a checkout with the pinned dependencies installed. A headless CI runner can provide a virtual display with `xvfb-run`. The package does not install operating-system libraries or FFmpeg. The acceptance harness checks the selected FFmpeg for the required encoder and filter and fails if either is missing.
 
 ## Package license inventory
@@ -18,14 +20,14 @@ The package bundles the Playwright JavaScript driver, while the Playwright insta
 
 ## Build and extract
 
-Run `npm run package` on the target operating system. The current builder configuration creates a Windows x64 ZIP or a Linux x64 `tar.gz` in `release/`. Extract the archive into a fresh directory before launching the app or running acceptance; the smoke harness accepts the executable path and does not extract archives itself.
+Run `npm run package` on the target operating system. The current builder configuration creates a Windows x64 ZIP or a Linux x64 `tar.gz` in `release/`. The examples below use the expected `1.0.0-candidate` filenames; use the exact archive filename produced by the builder or shown on the release page, without renaming it. Extract the archive into a fresh directory before launching the app or running acceptance; the smoke harness accepts the executable path and does not extract archives itself.
 
 Windows example:
 
 ```powershell
 npm run package
 New-Item -ItemType Directory -Path artifacts/install | Out-Null
-Expand-Archive -LiteralPath release/DemoForge-0.1.0-win-x64.zip -DestinationPath artifacts/install
+Expand-Archive -LiteralPath release/DemoForge-1.0.0-candidate-win-x64.zip -DestinationPath artifacts/install
 node scripts/package-smoke.mjs "$pwd/artifacts/install/DemoForge.exe" --ffmpeg "C:\path\to\ffmpeg.exe"
 ```
 
@@ -33,7 +35,7 @@ For an ordinary Linux installation, extract into a root-owned, non-user-writable
 
 ```sh
 sudo mkdir -p /opt/demoforge
-sudo tar --no-same-owner -xzf release/DemoForge-0.1.0-linux-x64.tar.gz -C /opt/demoforge
+sudo tar --no-same-owner -xzf release/DemoForge-1.0.0-candidate-linux-x64.tar.gz -C /opt/demoforge
 sudo chown -R root:root /opt/demoforge
 sudo chmod -R go-w /opt/demoforge
 sandbox=$(find /opt/demoforge -type f -name chrome-sandbox -print -quit)
@@ -48,7 +50,7 @@ Linux package acceptance, from an X11 or Wayland session, uses the same install 
 ```sh
 npm run package
 sudo mkdir -p /opt/demoforge-ci
-sudo tar --no-same-owner -xzf release/DemoForge-0.1.0-linux-x64.tar.gz -C /opt/demoforge-ci
+sudo tar --no-same-owner -xzf release/DemoForge-1.0.0-candidate-linux-x64.tar.gz -C /opt/demoforge-ci
 sudo chown -R root:root /opt/demoforge-ci
 sudo chmod -R go-w /opt/demoforge-ci
 sandbox=$(find /opt/demoforge-ci -type f -name chrome-sandbox -print -quit)

@@ -1,6 +1,6 @@
 {
   "name": "demoforge",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Record a browser workflow once. Replay it and publish video demos and step-by-step guides locally.",
   "private": true,
   "type": "module",
@@ -8,7 +8,7 @@
   "author": "Pastalikek65",
   "repository": "https://github.com/Pastalikek65/demoforge",
   "engines": {
-    "node": ">=22"
+    "node": "^24.0.0"
   },
   "main": "dist/electron/main.js",
   "bin": {
