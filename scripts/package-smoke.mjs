@@ -16,6 +16,12 @@ const projectRoot = path.resolve(scriptDirectory, '..');
 const stepTimeoutMs = 10_000;
 const operationTimeoutMs = 120_000;
 const browserSetupTimeoutMs = 660_000;
+const safeReplayErrorCodes = new Set([
+  'BROWSER_LAUNCH_FAILED', 'CANCELLED', 'NAVIGATION_SOURCE_INVALID', 'OUTPUT_DIRECTORY_FAILED',
+  'SCREENSHOT_FAILED', 'SENSITIVE_URL_QUERY', 'STEP_FAILED', 'TARGET_REQUIRED', 'URL_INVALID',
+  'URL_VARIABLE_REQUIRED', 'URL_VARIABLE_UNDECLARED', 'VALUE_REQUIRED', 'VARIABLE_REQUIRED',
+  'VARIABLE_UNDECLARED', 'ACTION_UNSUPPORTED',
+]);
 const readOwnedNamespaceLinks = createLinuxNamespaceObserver({ mode: linuxNamespaceObserverMode });
 
 function usage() {
@@ -561,11 +567,7 @@ async function replayWorkflowThroughUi(window, mainProcessId, expectedStepCount,
   let browserSandbox;
   try {
     await window.getByRole('button', { name: 'Replay workflow', exact: true }).click();
-    const completion = waitFor(window, async () => {
-      const rows = window.locator('.progress-box .result-list .result-row');
-      const status = await window.locator('.progress-box__heading').innerText();
-      return (await rows.count()) === expectedStepCount && /Passed/.test(status);
-    }, description, operationTimeoutMs);
+    const completion = waitForReplayCompletion(window, expectedStepCount, description, operationTimeoutMs);
     browserSandbox = browserSandboxPromise
       ? (await Promise.all([completion, browserSandboxPromise]))[1]
       : await completion.then(() => undefined);
@@ -577,6 +579,79 @@ async function replayWorkflowThroughUi(window, mainProcessId, expectedStepCount,
   assert.equal(rows.length, expectedStepCount, 'every workflow step should be shown in replay results');
   assert.ok(rows.every((row) => /Passed/.test(row)), 'every workflow step should pass');
   return { rows, browserSandbox };
+}
+
+export function classifyReplayErrorCode(errorText) {
+  if (typeof errorText !== 'string') return 'UNCLASSIFIED';
+  const match = /^([A-Z][A-Z_]*)(?=:|$)/.exec(errorText.trim());
+  return match && safeReplayErrorCodes.has(match[1]) ? match[1] : 'UNCLASSIFIED';
+}
+
+export function classifyReplayUiState(status, rowStatuses, expectedStepCount) {
+  const safeStatus = new Set(['Passed', 'Failed', 'Running', 'Ready']).has(status) ? status : 'Unknown';
+  const counts = { passedCount: 0, failedCount: 0, notRunCount: 0 };
+  const failedSteps = [];
+  for (const [index, row] of rowStatuses.entries()) {
+    const rowStatus = typeof row === 'string' ? row : row?.status;
+    if (rowStatus === 'passed') counts.passedCount += 1;
+    else if (rowStatus === 'failed') {
+      counts.failedCount += 1;
+      const candidate = typeof row === 'object' && row ? row.errorCode : undefined;
+      const errorCode = candidate === 'UNCLASSIFIED' || safeReplayErrorCodes.has(candidate) ? candidate : 'UNCLASSIFIED';
+      failedSteps.push({ step: index + 1, errorCode });
+    } else if (rowStatus === 'not-run') counts.notRunCount += 1;
+  }
+  const summary = { status: safeStatus, rowCount: rowStatuses.length, ...counts, failedSteps };
+  // App keeps the heading at Running until preview loading finishes, after it
+  // has already rendered the terminal step rows. A failed row is therefore
+  // terminal evidence while that heading is still present.
+  if (safeStatus === 'Failed' || summary.failedCount > 0) {
+    return { state: 'failed', ...summary };
+  }
+  if (safeStatus === 'Passed'
+    && summary.rowCount === expectedStepCount
+    && summary.passedCount === expectedStepCount
+    && summary.failedCount === 0
+    && summary.notRunCount === 0) {
+    return { state: 'passed', ...summary };
+  }
+  return { state: 'pending', ...summary };
+}
+
+export async function waitForReplayCompletion(window, expectedStepCount, description, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let lastState = classifyReplayUiState('Unknown', [], expectedStepCount);
+  const heading = window.locator('.progress-box__heading span');
+  const rows = window.locator('.progress-box .result-list .result-row');
+  while (Date.now() < deadline) {
+    if (await window.locator('[role="alert"]').count() > 0) {
+      throw new Error('Replay UI reported an error alert; message details are withheld.');
+    }
+    const headingText = await heading.count() > 0 ? (await heading.innerText()).trim() : 'Unknown';
+    const status = new Set(['Passed', 'Failed', 'Running', 'Ready']).has(headingText) ? headingText : 'Unknown';
+    const rowDetails = await rows.evaluateAll((elements) => elements.map((element) => {
+      const row = element;
+      let status = 'unknown';
+      if (row.classList.contains('result-row--passed')) status = 'passed';
+      else if (row.classList.contains('result-row--failed')) status = 'failed';
+      else if (row.classList.contains('result-row--not-run')) status = 'not-run';
+      const errorText = status === 'failed' ? row.querySelector('.result-row__body em')?.textContent ?? '' : '';
+      return { status, errorText };
+    }));
+    const rowStatuses = rowDetails.map(({ status, errorText }) => ({
+      status,
+      errorCode: status === 'failed' ? classifyReplayErrorCode(errorText) : undefined,
+    }));
+    lastState = classifyReplayUiState(status, rowStatuses, expectedStepCount);
+    if (lastState.state === 'passed') return lastState;
+    if (lastState.state === 'failed') {
+      const failedSteps = lastState.failedSteps.map(({ step, errorCode }) => `${step}:${errorCode}`).join(',') || 'unknown';
+      throw new Error(`Replay failure evidence (heading=${lastState.status}, rows=${lastState.rowCount}, failed steps=${failedSteps}, not-run=${lastState.notRunCount}); raw step details are withheld.`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  const failedSteps = lastState.failedSteps.map(({ step, errorCode }) => `${step}:${errorCode}`).join(',') || 'none';
+  throw new Error(`Timed out waiting for ${description} after ${timeoutMs} ms (last status=${lastState.status}, rows=${lastState.rowCount}, failed steps=${failedSteps}, not-run=${lastState.notRunCount}).`);
 }
 
 async function replayAndExport(window, routes, privateValue, ffmpegPath, mainProcessId) {
