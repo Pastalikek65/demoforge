@@ -23,11 +23,40 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx install-electron --no
-      - name: Bound Linux apt network retries
+      - name: Configure bounded Ubuntu package mirrors
         if: runner.os == 'Linux'
         shell: bash
         run: |
           set -euo pipefail
+
+          mirror_list=/etc/apt/apt-mirrors.txt
+          source_paths=(/etc/apt/sources.list /etc/apt/sources.list.d)
+          if sudo test -f "$mirror_list" && sudo grep -Rqs 'apt-mirrors.txt' "${source_paths[@]}"; then
+            mirror_urls=$(mktemp)
+            candidates=$(mktemp)
+            trap 'rm -f "$mirror_urls" "$candidates"' EXIT
+
+            if curl --fail --silent --show-error --location --max-time 10 \
+              http://mirrors.ubuntu.com/mirrors.txt -o "$mirror_urls"; then
+              awk '
+                NF && $1 !~ /^#/ && $1 ~ /^https?:\/\// && $1 ~ /\/ubuntu\/?$/ &&
+                  $1 !~ /^https?:\/\/(azure\.)?archive\.ubuntu\.com\/ubuntu\/?$/ {
+                  printf "%s\tpriority:%d\n", $1, ++count
+                }
+              ' "$mirror_urls" >"$candidates"
+            else
+              echo 'Ubuntu mirror discovery did not respond; using the official archive fallbacks.' >&2
+            fi
+
+            {
+              cat "$candidates"
+              printf '%s\tpriority:%d\n' 'http://archive.ubuntu.com/ubuntu/' 1000
+              printf '%s\tpriority:%d\n' 'http://azure.archive.ubuntu.com/ubuntu/' 1001
+            } | sudo tee "$mirror_list" >/dev/null
+          else
+            echo 'Runner sources do not use apt-mirrors.txt; preserving their configured Ubuntu archive.'
+          fi
+
           sudo tee /etc/apt/apt.conf.d/99-demoforge-ci-network-bounds >/dev/null <<'EOF'
           Acquire::Retries "2";
           Acquire::http::Timeout "30";
@@ -40,8 +69,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo timeout 8m apt-get update
-          sudo timeout 8m apt-get install -y apparmor ffmpeg xvfb fonts-dejavu-core
+          sudo timeout 5m apt-get update
+          sudo timeout 18m apt-get install -y --no-install-recommends apparmor ffmpeg xvfb fonts-dejavu-core
       - name: Load narrowly scoped Linux user-namespace profiles
         if: runner.os == 'Linux'
         shell: bash

@@ -292,15 +292,16 @@ async function verifyBlackMask(ffmpegPath, file, label, crop = { x: 300, y: 100,
   assert.ok(maximumChannelValue(pixels) <= 24, `${label} should contain the opaque black mask at the reviewed coordinates`);
 }
 
-async function verifyCaptionPixels(ffmpegPath, file) {
-  const crop = { x: 240, y: 640, width: 800, height: 70 };
+export async function verifyCaptionPixels(ffmpegPath, file) {
+  // The smoke fixture's mask ends at y=660; inspect only the unmasked bottom band.
+  const crop = { x: 240, y: 664, width: 800, height: 56 };
   const pixels = await readRawRgb(ffmpegPath, file, crop);
   assert.equal(pixels.length, crop.width * crop.height * 3, 'caption crop should decode to RGB pixels');
   let darkPixels = 0;
   for (let index = 0; index < pixels.length; index += 3) {
     if (pixels[index] <= 80 && pixels[index + 1] <= 80 && pixels[index + 2] <= 80) darkPixels += 1;
   }
-  assert.ok(darkPixels >= 32, 'the exported MP4 should render caption outline pixels in the bottom caption band');
+  assert.ok(darkPixels >= 32, 'the exported MP4 should render caption outline pixels in the unmasked bottom caption band');
 }
 
 async function chromiumGeometry(page, url) {
