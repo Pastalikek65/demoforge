@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { basename, dirname, join } from 'node:path';
 import type { Action, Project } from '../shared/types.js';
 import { hasSensitiveUrlQuery } from '../shared/url.js';
+import { isReservedVariableName } from '../shared/variables.js';
 
 const MAX_PROJECT_BYTES = 5 * 1024 * 1024;
 const MAX_STEPS = 500;
@@ -146,6 +147,7 @@ function parseVariable(value: unknown, index: number, names: Set<string>): Proje
   const path = `variables[${index}]`;
   const record = asRecord(value, path, ['name', 'secret', 'description']);
   const name = requiredString(record, 'name', path, 64);
+  if (isReservedVariableName(name)) fail(`${path}.name`, 'is a reserved runtime variable name');
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
     fail(`${path}.name`, 'must be a valid variable identifier');
   }

@@ -53,6 +53,11 @@ describe('createProject', () => {
 });
 
 describe('parseProject', () => {
+  it.each(['constructor', 'prototype', '__proto__'])('rejects reserved runtime variable name %s before persistence', name => {
+    const project = createProject('Reserved-name fixture');
+    project.variables = [{ name, secret: true, description: 'Synthetic' }];
+    expect(() => parseProject(project)).toThrow(/reserved/i);
+  });
   it('accepts a complete version-one project without changing its declared data', () => {
     const fixture = projectFixture();
 

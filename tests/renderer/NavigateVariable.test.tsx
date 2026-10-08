@@ -64,6 +64,14 @@ afterEach(() => {
 });
 
 describe('runtime URL navigation', () => {
+  it('blocks reserved imported variable names before invoking the desktop bridge', async () => {
+    const bridge = installBridge({ ...projectFixture, variables: [...projectFixture.variables, { name: 'constructor', secret: true, description: 'Synthetic' }] });
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Shared report tour' });
+    fireEvent.click(screen.getByRole('button', { name: 'Save project' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/reserved/i);
+    expect(bridge.saveProject).not.toHaveBeenCalled();
+  });
   it('switches a navigation step between literal URL and runtime variable without stale keys', async () => {
     const bridge = installBridge();
     render(<App />);

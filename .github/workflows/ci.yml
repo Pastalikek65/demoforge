@@ -23,10 +23,72 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx install-electron --no
+      - name: Bound Linux apt network retries
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo tee /etc/apt/apt.conf.d/99-demoforge-ci-network-bounds >/dev/null <<'EOF'
+          Acquire::Retries "2";
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          EOF
       - run: npx playwright install --with-deps chromium
+        timeout-minutes: 15
       - name: Linux media/display prerequisites
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg xvfb fonts-dejavu-core
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo timeout 8m apt-get update
+          sudo timeout 8m apt-get install -y apparmor ffmpeg xvfb fonts-dejavu-core
+      - name: Load narrowly scoped Linux user-namespace profiles
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1
+          restriction=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          if [[ ! -r "$restriction" || "$(<"$restriction")" != 1 ]]; then
+            echo "Ubuntu AppArmor unprivileged-userns restriction must be enabled for sandbox acceptance." >&2
+            exit 1
+          fi
+
+          profile_source=$(mktemp)
+          trap 'rm -f "$profile_source"' EXIT
+          cat >"$profile_source" <<EOF
+          abi <abi/4.0>,
+          include <tunables/global>
+
+          profile demoforge-ci-source-electron ${GITHUB_WORKSPACE}/node_modules/electron/dist/electron flags=(unconfined) {
+            userns,
+          }
+
+          profile demoforge-ci-source-chromium ${HOME}/.cache/ms-playwright/chromium-*/chrome-linux64/chrome flags=(unconfined) {
+            userns,
+          }
+
+          profile demoforge-ci-source-headless-shell ${HOME}/.cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell flags=(unconfined) {
+            userns,
+          }
+
+          profile demoforge-ci-package-chromium ${RUNNER_TEMP}/demoforge-package-smoke-*/app-data/browser-runtime/chromium-*/chrome-linux64/chrome flags=(unconfined) {
+            userns,
+          }
+
+          profile demoforge-ci-package-headless-shell ${RUNNER_TEMP}/demoforge-package-smoke-*/app-data/browser-runtime/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell flags=(unconfined) {
+            userns,
+          }
+          EOF
+          sudo install -o root -g root -m 0644 "$profile_source" /etc/apparmor.d/demoforge-ci
+          sudo apparmor_parser -r /etc/apparmor.d/demoforge-ci
+          profiles=/sys/kernel/security/apparmor/profiles
+          for profile in demoforge-ci-source-electron demoforge-ci-source-chromium demoforge-ci-source-headless-shell demoforge-ci-package-chromium demoforge-ci-package-headless-shell; do
+            if ! sudo grep -Fq "$profile" "$profiles"; then
+              echo "AppArmor did not load the expected profile: $profile" >&2
+              exit 1
+            fi
+          done
       - name: Windows media prerequisite
         if: runner.os == 'Windows'
         shell: pwsh
@@ -59,16 +121,27 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Linux fresh archive acceptance
         if: runner.os == 'Linux'
+        shell: bash
         run: |
+          set -euo pipefail
+          if [ "$(id -u)" -eq 0 ]; then
+            echo 'Run the installed archive as the ordinary runner user so its root-owned setuid helper is exercised.' >&2
+            exit 1
+          fi
           sudo install -d -o root -g root -m 755 /opt/demoforge-ci
-          sudo tar -xzf release/*.tar.gz -C /opt/demoforge-ci
+          archive=$(find release -maxdepth 1 -type f -name '*.tar.gz' -print -quit)
+          test -n "$archive"
+          sudo tar --no-same-owner -xzf "$archive" -C /opt/demoforge-ci
           executable=$(rg --files /opt/demoforge-ci | rg '/demoforge$')
           sandbox=$(rg --files /opt/demoforge-ci | rg '/chrome-sandbox$')
           sudo chown -R root:root /opt/demoforge-ci
+          sudo chmod -R go-w /opt/demoforge-ci
           sudo chmod 4755 "$sandbox"
-          xvfb-run --auto-servernum node scripts/package-smoke.mjs "$executable" | tee artifacts/package-acceptance.log
+          test "$(stat -c '%U:%G:%a' "$sandbox")" = 'root:root:4755'
+          TMPDIR="$RUNNER_TEMP" xvfb-run --auto-servernum node scripts/package-smoke.mjs "$executable" 2>&1 | tee artifacts/package-acceptance.log
       - run: node scripts/checksums.mjs
       - uses: actions/upload-artifact@v7.0.2
+        if: always()
         with:
           name: demoforge-${{ runner.os }}-${{ github.sha }}
           path: |

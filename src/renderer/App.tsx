@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { isReservedVariableName } from '../shared/variables.js';
 import type {
   Action,
   Annotation,
@@ -84,6 +85,7 @@ function projectEditorError(project: Project): string | null {
   if (project.edits.masks.length > 2_000) return 'A project can contain at most 2,000 privacy masks.';
   if (project.edits.annotations.length > 2_000) return 'A project can contain at most 2,000 subtitles.';
   if (project.edits.zooms.length > 500) return 'A project can contain at most 500 zoom moments.';
+  if (project.variables.some(variable => isReservedVariableName(variable.name))) return 'Reserved runtime variable names cannot be used.';
   if (project.variables.some((variable) => variable.name.length > 64 || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(variable.name))) {
     return 'Runtime variable names must be valid identifiers of at most 64 characters.';
   }
@@ -324,6 +326,10 @@ function App() {
     }
     if (project.variables.some((variable) => variable.name === name)) {
       setError(`A runtime variable named ${name} already exists.`);
+      return;
+    }
+    if (isReservedVariableName(name)) {
+      setError('Reserved runtime variable names cannot be used.');
       return;
     }
     if (project.variables.length >= 500) {
@@ -1061,7 +1067,7 @@ function App() {
                   type={variable.secret ? 'password' : 'text'}
                   aria-label={variable.description || variable.name}
                   autoComplete="off"
-                  value={runtimeValues[variable.name] ?? ''}
+                  value={Object.hasOwn(runtimeValues, variable.name) ? runtimeValues[variable.name] : ''}
                   onChange={(event) => { const value = event.currentTarget.value; setRuntimeValues((current) => ({ ...current, [variable.name]: value })); }}
                   disabled={lockWorkspace}
                 />

@@ -200,7 +200,7 @@ export async function replay(project: Project, options: ReplayOptions): Promise<
     };
     options.signal?.addEventListener('abort', stopForAbort, { once: true });
     if (options.signal?.aborted) throw new Error('CANCELLED');
-    const launch = chromium.launch({ headless: options.headless ?? true }).then(async (launchedBrowser) => {
+    const launch = chromium.launch({ headless: options.headless ?? true, chromiumSandbox: true }).then(async (launchedBrowser) => {
       browser = launchedBrowser;
       if (options.signal?.aborted) {
         await closeBrowser();
@@ -348,7 +348,7 @@ export async function startRecording(options: RecordOptions): Promise<RecordingS
   }
 
   try {
-    const launch = chromium.launch({ headless: options.headless ?? false }).then(async (launchedBrowser) => {
+    const launch = chromium.launch({ headless: options.headless ?? false, chromiumSandbox: true }).then(async (launchedBrowser) => {
       browser = launchedBrowser;
       if (cancelled || options.signal?.aborted) {
         if (launchedBrowser.isConnected()) await launchedBrowser.close().catch(() => {});

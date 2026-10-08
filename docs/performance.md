@@ -14,7 +14,7 @@ The script writes a detailed JSON result to `artifacts/performance-benchmark.jso
 
 ## Recorded run
 
-The following values came from one run on 2026-10-08 at 14:33:37 UTC. They describe this machine and this synthetic workflow; they are not cross-platform performance claims.
+The following values came from one run on 2026-10-08 at 16:16:39 UTC after the explicit workflow-browser sandbox and installer lifecycle changes. They describe this machine and this synthetic workflow; they are not cross-platform performance claims.
 
 | Measurement | Result |
 | --- | ---: |
@@ -23,14 +23,14 @@ The following values came from one run on 2026-10-08 at 14:33:37 UTC. They descr
 | Node.js | v24.21.0 |
 | Viewport | 1280×720 |
 | Workflow | 25 steps, 80 ms pause after browser actions |
-| Recorded input duration | 3,220 ms |
-| Replay wall clock | 3,727.4 ms |
-| Export wall clock | 4,793 ms |
-| Capture output | 1,180,575 bytes total; 446,148-byte WebM and 25 screenshots |
-| MP4 | 150,534 bytes |
-| GIF | 709,753 bytes |
-| All export output | 1,498,565 bytes, including guide files and 25 step images |
-| Node RSS sampled peak during replay | 158,400,512 bytes (about 151.1 MiB) |
-| Node RSS sampled peak during export | 163,213,312 bytes (about 155.6 MiB) |
+| Recorded input duration | 4,194 ms |
+| Replay wall clock | 5,004.5 ms |
+| Export wall clock | 7,558.6 ms |
+| Capture output | 1,268,160 bytes total; 533,735-byte WebM and 25 screenshots |
+| MP4 | 183,168 bytes |
+| GIF | 1,058,856 bytes |
+| All export output | 1,880,300 bytes, including guide files and 25 step images |
+| Node RSS sampled peak during replay | 153,710,592 bytes (about 146.6 MiB) |
+| Node RSS sampled peak during export | 158,400,512 bytes (about 151.1 MiB) |
 
 The benchmark measures each phase with `performance.now()` and samples this Node process's RSS every 20 ms. The RSS values exclude the separately spawned Chromium and FFmpeg processes, so they do not represent total application memory. The sample interval can also miss brief peaks. Replay includes browser startup, workflow execution, screenshots, and video finalization; export includes FFmpeg processing and guide generation.

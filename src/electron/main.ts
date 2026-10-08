@@ -18,25 +18,35 @@ let run: RunResult | undefined;
 let runWorkflow = '';
 let projectFile: string | undefined;
 let active = false;
+let activeOperation: Promise<unknown> | undefined;
 let exportAbort: AbortController | undefined;
+let installAbort: AbortController | undefined;
+let installing: Promise<void> | undefined;
 const previewFiles = new Map<string, string>();
 protocol.registerSchemesAsPrivileged([{ scheme: 'demoforge-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
 const index = fileURLToPath(new URL('../renderer/index.html', import.meta.url));
 const editorURL = pathToFileURL(index).href;
 const fingerprint = workflowHash;
+async function setupBrowser(directory: string): Promise<void> {
+  installAbort = new AbortController();
+  installing = installBrowser(directory, installAbort.signal);
+  try { await installing; } finally { installing = undefined; installAbort = undefined; }
+}
 async function captureFolder(): Promise<string> {
   const parent = path.join(app.getPath('userData'), 'captures'); await mkdir(parent, { recursive: true });
   return mkdtemp(path.join(parent, 'run-'));
 }
 async function exclusive<T>(operation: () => Promise<T>): Promise<T> {
   if (active) throw new Error('Finish or cancel the current operation first.');
-  active = true; try { return await operation(); } finally { active = false; }
+  active = true;
+  try { const pending = operation(); activeOperation = pending; return await pending; }
+  finally { activeOperation = undefined; active = false; }
 }
 app.whenReady().then(async () => {
   const browserDirectory = path.join(app.getPath('userData'), 'browser-runtime');
   if (app.isPackaged) process.env.PLAYWRIGHT_BROWSERS_PATH = browserDirectory;
   if (process.argv.includes('--install-browser')) {
-    try { await installBrowser(browserDirectory); app.exit(0); }
+    try { await setupBrowser(browserDirectory); app.exit(0); }
     catch (error) { console.error(error instanceof Error ? error.message : 'Browser setup failed.'); app.exit(1); }
     return;
   }
@@ -106,7 +116,7 @@ app.whenReady().then(async () => {
   handle('installBrowser', () => exclusive(async () => {
     const { chromium } = await import('playwright');
     const cache = path.dirname(path.dirname(path.dirname(chromium.executablePath())));
-    await installBrowser(process.env.PLAYWRIGHT_BROWSERS_PATH ?? cache);
+    await setupBrowser(process.env.PLAYWRIGHT_BROWSERS_PATH ?? cache);
     return doctor();
   }));
   handle('getPreview', () => {
@@ -117,4 +127,7 @@ app.whenReady().then(async () => {
   });
   await window.loadFile(index);
 });
-app.on('window-all-closed', () => { void service?.close().finally(() => app.quit()); });
+app.on('window-all-closed', () => {
+  exportAbort?.abort(); installAbort?.abort();
+  void Promise.allSettled([service?.close(), installing, activeOperation]).finally(() => app.quit());
+});
