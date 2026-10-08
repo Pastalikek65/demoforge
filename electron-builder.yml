@@ -9,9 +9,11 @@ files:
   - THIRD_PARTY_NOTICES.md
 asarUnpack:
   - dist/service/**
+  - node_modules/playwright/**
+  - node_modules/playwright-core/**
 extraResources:
-  - from: artifacts/runtime
-    to: browser-runtime
+  - from: artifacts/licenses
+    to: licenses
 win:
   target:
     - target: zip

@@ -35,7 +35,7 @@ export interface StepResult {
   startMs: number; endMs: number; screenshot?: string; error?: string;
 }
 export interface RunResult {
-  schemaVersion: 1; status: 'passed' | 'failed'; projectName: string;
+  schemaVersion: 1; status: 'passed' | 'failed'; projectName: string; workflowHash: string;
   startedAt: string; durationMs: number; video?: string;
   steps: StepResult[];
   cursor: { timeMs: number; x: number; y: number }[];
@@ -59,6 +59,7 @@ export interface StudioAPI {
   export(project: Project, formats: ExportOptions['formats'], reviewed: boolean): Promise<ExportResult>;
   cancel(): Promise<void>;
   doctor(): Promise<{ name: string; ok: boolean; detail: string }[]>;
+  installBrowser(): Promise<{ name: string; ok: boolean; detail: string }[]>;
   getPreview(): Promise<{ video?: string; screenshots: string[] }>;
   onProgress(callback: (result: StepResult) => void): () => void;
 }

@@ -5,6 +5,8 @@
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
+  "author": "Pastalikek65",
+  "repository": "https://github.com/Pastalikek65/demoforge",
   "engines": {
     "node": ">=22"
   },
@@ -21,7 +23,7 @@
     "test:browser": "vitest run tests/browser --testTimeout=60000",
     "start": "electron .",
     "cli": "tsx src/cli.ts",
-    "package": "npm run build && node scripts/stage-runtime.mjs && electron-builder",
+    "package": "npm run build && node scripts/distribution-notices.mjs && electron-builder",
     "browser:install": "playwright install chromium"
   },
   "dependencies": {

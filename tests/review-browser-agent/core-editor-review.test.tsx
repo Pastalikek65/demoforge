@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Project, RunResult, StudioAPI } from '../../src/shared/types';
+import { workflowHash } from '../../src/core/fingerprint';
 import { serializeProject } from '../../src/core/project';
 import App from '../../src/renderer/App';
 
@@ -21,6 +22,7 @@ const emptyRun: RunResult = {
   schemaVersion: 1,
   status: 'passed',
   projectName: validProject.name,
+  workflowHash: workflowHash(validProject),
   startedAt: '2026-10-08T00:00:00.000Z',
   durationMs: 0,
   steps: [],
@@ -42,6 +44,7 @@ function makeBridge(): StudioAPI {
     export: vi.fn(async () => ({ files: [], warnings: [] })),
     cancel: vi.fn(async () => undefined),
     doctor: vi.fn(async () => []),
+    installBrowser: vi.fn(async () => []),
     getPreview: vi.fn(async () => ({ screenshots: [] })),
     onProgress: vi.fn(() => () => undefined),
   };

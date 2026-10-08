@@ -87,6 +87,47 @@ describe('parseProject', () => {
     expect(() => parseProject(fixture)).toThrow(/steps\[0\].*embedded credentials/i);
   });
 
+  it('rejects sensitive literal navigation query parameters without echoing their values', () => {
+    const fixture = projectFixture();
+    const secret = 'SYNTHETIC_ACCESS_TOKEN_6c4a';
+    fixture.steps[0] = {
+      ...fixture.steps[0],
+      target: `https://example.test/callback?access_token=${secret}&state=fixture`,
+    };
+
+    let error: unknown;
+    try { parseProject(fixture); } catch (caught) { error = caught; }
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(/sensitive.*runtime variable/i);
+    expect((error as Error).message).not.toContain(secret);
+  });
+
+  it('allows a declared runtime variable to provide a navigation URL', () => {
+    const fixture = projectFixture();
+    const { target: _target, ...step } = fixture.steps[0];
+    fixture.steps[0] = { ...step, variable: 'startUrl' };
+    fixture.variables.push({ name: 'startUrl', secret: false, description: 'Starting page URL' });
+
+    expect(parseProject(fixture).steps[0]).toMatchObject({ action: 'navigate', variable: 'startUrl' });
+    expect(parseProject(fixture).steps[0]).not.toHaveProperty('target');
+  });
+
+  it('rejects an undeclared navigation URL variable', () => {
+    const fixture = projectFixture();
+    const { target: _target, ...step } = fixture.steps[0];
+    fixture.steps[0] = { ...step, variable: 'missingUrl' };
+
+    expect(() => parseProject(fixture)).toThrow(/steps\[0\].*variable.*missingUrl/i);
+  });
+
+  it('requires navigation to provide exactly one literal target or runtime variable', () => {
+    const fixture = projectFixture();
+    fixture.steps[0] = { ...fixture.steps[0], variable: 'startUrl' };
+    fixture.variables.push({ name: 'startUrl', secret: false, description: 'Starting page URL' });
+
+    expect(() => parseProject(fixture)).toThrow(/steps\[0\].*exactly one/i);
+  });
+
   it('requires a locator for click actions', () => {
     const fixture = projectFixture();
     fixture.steps[0] = { id: 'step-1', name: 'Click', action: 'click', timeoutMs: 1000, pauseMs: 0 };

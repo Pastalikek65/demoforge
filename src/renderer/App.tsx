@@ -10,6 +10,7 @@ import type {
   StepResult,
   StudioAPI,
 } from '../shared/types';
+import { hasSensitiveUrlQuery, isHttpUrl } from '../shared/url';
 
 const actions: Action[] = ['navigate', 'click', 'fill', 'select', 'wait'];
 const exportChoices: { value: ExportOptions['formats'][number]; label: string }[] = [
@@ -19,7 +20,7 @@ const exportChoices: { value: ExportOptions['formats'][number]; label: string }[
   { value: 'html', label: 'HTML guide' },
 ];
 
-type BusyAction = 'new' | 'open' | 'save' | 'startRecording' | 'stopRecording' | 'replay' | 'export';
+type BusyAction = 'new' | 'open' | 'save' | 'startRecording' | 'stopRecording' | 'replay' | 'export' | 'installBrowser';
 type PreviewData = {
   video?: string;
   screenshots: { index: number; url: string }[];
@@ -73,16 +74,6 @@ function isIntegerBetween(value: number, minimum: number, maximum: number) {
   return Number.isSafeInteger(value) && value >= minimum && value <= maximum;
 }
 
-function validNavigationTarget(target: string | undefined) {
-  if (!target) return false;
-  try {
-    const url = new URL(target);
-    return ['http:', 'https:'].includes(url.protocol) && Boolean(url.hostname) && !url.username && !url.password;
-  } catch {
-    return false;
-  }
-}
-
 function projectEditorError(project: Project): string | null {
   if (!project.name.trim()) return 'Enter a project name before saving or replaying.';
   if (project.name.length > 200) return 'Project names can be at most 200 characters.';
@@ -97,6 +88,7 @@ function projectEditorError(project: Project): string | null {
     return 'Runtime variable names must be valid identifiers of at most 64 characters.';
   }
   const variables = new Set(project.variables.map((variable) => variable.name));
+  if (variables.size !== project.variables.length) return 'Runtime variable names must be unique.';
 
   for (let index = 0; index < project.steps.length; index += 1) {
     const step = project.steps[index];
@@ -107,12 +99,17 @@ function projectEditorError(project: Project): string | null {
     if ((step.value?.length ?? 0) > 10_000) return `${label} values can be at most 10,000 characters.`;
     if (!isIntegerBetween(step.timeoutMs, 1, 120_000)) return `${label} timeout must be a whole number from 1 to 120,000 ms.`;
     if (!isIntegerBetween(step.pauseMs, 0, 60_000)) return `${label} pause must be a whole number from 0 to 60,000 ms.`;
-    if (step.action === 'navigate' && !validNavigationTarget(step.target)) return `${label} needs a complete HTTP or HTTPS URL without embedded credentials.`;
+    if (step.action === 'navigate') {
+      if ((step.target === undefined) === (step.variable === undefined)) return `${label} needs exactly one literal URL or runtime URL variable.`;
+      if (step.target !== undefined && !isHttpUrl(step.target)) return `${label} needs a complete HTTP or HTTPS URL without embedded credentials.`;
+      if (step.target !== undefined && hasSensitiveUrlQuery(step.target)) return `${label} URL has a sensitive query key. Move the full URL to a secret runtime variable.`;
+      if (step.variable !== undefined && !variables.has(step.variable)) return `${label} refers to a runtime URL variable that no longer exists.`;
+    }
     if (['click', 'fill', 'select'].includes(step.action) && !step.target?.trim()) return `${label} needs a locator.`;
     if (['fill', 'select'].includes(step.action)) {
       if ((step.value === undefined) === (step.variable === undefined)) return `${label} needs exactly one literal value or runtime variable.`;
       if (step.variable !== undefined && !variables.has(step.variable)) return `${label} refers to a runtime variable that no longer exists.`;
-    } else if (step.value !== undefined || step.variable !== undefined) {
+    } else if (step.value !== undefined || (step.variable !== undefined && step.action !== 'navigate')) {
       return `${label} ${step.action} does not accept a value or runtime variable.`;
     }
   }
@@ -133,6 +130,21 @@ function projectEditorError(project: Project): string | null {
     if (!annotation.text.trim() || annotation.text.length > 10_000 || !isIntegerBetween(annotation.startMs, 0, timeLimit)
       || !isIntegerBetween(annotation.endMs, 1, timeLimit) || annotation.endMs <= annotation.startMs) {
       return `Subtitle ${index + 1} needs text and a valid time range.`;
+    }
+  }
+  return null;
+}
+
+function runtimeUrlError(project: Project, values: Record<string, string>): string | null {
+  const variables = new Map(project.variables.map((variable) => [variable.name, variable]));
+  for (const step of project.steps) {
+    if (step.action !== 'navigate' || !step.variable) continue;
+    const variable = variables.get(step.variable);
+    const url = values[step.variable] ?? '';
+    if (!url.trim()) return `${step.name} needs a URL for runtime variable ${step.variable}.`;
+    if (!isHttpUrl(url)) return `${step.name} needs a complete HTTP or HTTPS URL without embedded credentials.`;
+    if (hasSensitiveUrlQuery(url) && !variable?.secret) {
+      return `${step.name} URL contains a sensitive query key. Mark ${step.variable} as secret in runtime variable settings.`;
     }
   }
   return null;
@@ -170,10 +182,14 @@ function App() {
   const [reviewed, setReviewed] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [doctorChecks, setDoctorChecks] = useState<{ name: string; ok: boolean; detail: string }[] | null>(null);
+  const [setupError, setSetupError] = useState('');
+  const [setupNotice, setSetupNotice] = useState('');
   const [maskDraft, setMaskDraft] = useState({ x: '28', y: '28', width: '240', height: '110', startMs: '0', endMs: '3000' });
   const [annotationDraft, setAnnotationDraft] = useState({ text: '', startMs: '0', endMs: '3000' });
   const [zoomDraft, setZoomDraft] = useState({ scale: '1.5', x: '0', y: '0', startMs: '0', endMs: '2000' });
   const [audioDraft, setAudioDraft] = useState({ file: '', startMs: '0', volume: '1' });
+  const [variableDraft, setVariableDraft] = useState({ name: '', description: '', secret: true });
   const cancellationRequestedRef = useRef(false);
 
   const selectedStep = project?.steps.find((step) => step.id === selectedStepId) ?? null;
@@ -214,6 +230,14 @@ function App() {
         if (active) setError(errorText('Opening a new project', loadError));
       }
     })();
+    void (async () => {
+      try {
+        const checks = await desktopApi().doctor();
+        if (active) setDoctorChecks(checks);
+      } catch (doctorError) {
+        if (active) setError(errorText('Checking local requirements', doctorError));
+      }
+    })();
     return () => {
       active = false;
     };
@@ -243,11 +267,14 @@ function App() {
         if (key === 'action') {
           const action = value as Action;
           next.action = action;
-          if (step.action === 'navigate' && action !== 'navigate') delete next.target;
           if (action === 'navigate') {
-            if (!validNavigationTarget(next.target)) delete next.target;
             delete next.value;
+            if (next.variable) delete next.target;
+            else if (!isHttpUrl(next.target ?? '')) delete next.target;
+          } else if (step.action === 'navigate') {
+            delete next.target;
             delete next.variable;
+            if (action === 'fill' || action === 'select') next.value = '';
           } else if (action === 'click' || action === 'wait') {
             delete next.value;
             delete next.variable;
@@ -265,18 +292,74 @@ function App() {
         }
         if (key === 'variable') {
           if (typeof value === 'string' && value.length > 0) {
+            if (next.action === 'navigate') delete next.target;
             delete next.value;
             next.variable = value;
           } else {
             delete next.variable;
+            if (next.action === 'navigate') delete next.target;
             if (next.value === undefined && (next.action === 'fill' || next.action === 'select')) next.value = '';
           }
           return next;
         }
-        if (key === 'target' && value === '') delete next.target;
-        else Object.assign(next, { [key]: value });
+        if (key === 'target') {
+          if (value === '') delete next.target;
+          else {
+            next.target = String(value);
+            if (next.action === 'navigate') delete next.variable;
+          }
+        } else Object.assign(next, { [key]: value });
         return next;
       }),
+    }));
+  }
+
+  function addRuntimeVariable() {
+    if (!project) return;
+    const name = variableDraft.name.trim();
+    const description = variableDraft.description.trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(name)) {
+      setError('Use a variable name that starts with a letter or underscore and contains only letters, numbers, and underscores (up to 64 characters).');
+      return;
+    }
+    if (project.variables.some((variable) => variable.name === name)) {
+      setError(`A runtime variable named ${name} already exists.`);
+      return;
+    }
+    if (project.variables.length >= 500) {
+      setError('A project can contain at most 500 runtime variables.');
+      return;
+    }
+    if (description.length > 2_000) {
+      setError('Variable descriptions can be at most 2,000 characters.');
+      return;
+    }
+    editProject((current) => ({
+      ...current,
+      variables: [...current.variables, { name, secret: variableDraft.secret, description }],
+    }));
+    setVariableDraft({ name: '', description: '', secret: true });
+    setNotice(`Added ${variableDraft.secret ? 'secret ' : ''}runtime variable ${name}.`);
+    setError('');
+  }
+
+  function removeRuntimeVariable(name: string) {
+    if (!project || project.steps.some((step) => step.variable === name)) return;
+    editProject((current) => ({
+      ...current,
+      variables: current.variables.filter((variable) => variable.name !== name),
+    }));
+    setRuntimeValues((current) => {
+      const next = { ...current };
+      delete next[name];
+      return next;
+    });
+  }
+
+  function updateRuntimeVariableSecret(name: string, secret: boolean) {
+    editProject((current) => ({
+      ...current,
+      variables: current.variables.map((variable) => variable.name === name ? { ...variable, secret } : variable),
     }));
   }
 
@@ -361,6 +444,23 @@ function App() {
       setNotice(`Opened ${fileName(opened.file)}.`);
     } catch (actionError) {
       setError(errorText('Opening the project', actionError));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function installBrowser() {
+    setBusy('installBrowser');
+    setSetupError('');
+    setSetupNotice('Downloading the local browser runtime. This one-time setup may take a few minutes.');
+    try {
+      const checks = await desktopApi().installBrowser();
+      setDoctorChecks(checks);
+      const browser = checks.find((check) => check.name.toLowerCase() === 'chromium');
+      setSetupNotice(browser?.ok ? 'Browser setup finished. DemoForge checked local requirements again.' : 'Setup finished, but Chromium is still unavailable. Review the local requirements below.');
+    } catch (installError) {
+      setSetupError(errorText('Installing the browser', installError));
+      setSetupNotice('');
     } finally {
       setBusy(null);
     }
@@ -486,6 +586,12 @@ function App() {
       return;
     }
     const values = Object.fromEntries(project.variables.map((variable) => [variable.name, runtimeValues[variable.name] ?? '']));
+    const runtimeValidationError = runtimeUrlError(project, values);
+    if (runtimeValidationError) {
+      setError(runtimeValidationError);
+      setNotice('');
+      return;
+    }
     setBusy('replay');
     setError('');
     setNotice('');
@@ -636,6 +742,8 @@ function App() {
     ...(project?.edits.zooms.map((zoom) => zoom.endMs) ?? []),
   );
   const canCancel = !cancelling && (recording || busy === 'startRecording' || busy === 'replay' || busy === 'export');
+  const missingChecks = doctorChecks?.filter((check) => !check.ok) ?? [];
+  const browserMissing = missingChecks.some((check) => check.name.toLowerCase() === 'chromium');
 
   if (!project) {
     return (
@@ -689,6 +797,19 @@ function App() {
         </div>
       )}
 
+      {missingChecks.length > 0 && <section className="setup-panel" aria-label="Local requirements" role="region">
+        <div className="setup-panel__copy">
+          <strong>Local setup needs attention</strong>
+          {missingChecks.map((check) => <p key={check.name}><b>{check.name}:</b> {check.detail}</p>)}
+          {setupError && <p className="setup-panel__error" role="alert">{setupError}</p>}
+          {setupNotice && <p className="setup-panel__notice" role="status">{setupNotice}</p>}
+        </div>
+        {browserMissing && <button className="button button--outline setup-panel__button" type="button" onClick={installBrowser} disabled={isBusy}>
+          {busy === 'installBrowser' ? 'Installing browser…' : 'Install browser'}
+        </button>}
+      </section>}
+      {missingChecks.length === 0 && setupNotice && <div className="setup-success" role="status">{setupNotice}</div>}
+
       <main className="workbench" aria-label="DemoForge editor">
         <aside className="panel sequence-panel" aria-label="Workflow steps">
           <div className="panel-heading">
@@ -724,7 +845,7 @@ function App() {
                         <span className="step-index">{String(index + 1).padStart(2, '0')}</span>
                         <span className="step-row__body">
                           <span className="step-row__name">{step.name || 'Untitled step'}</span>
-                          <span className="step-row__meta"><span className={`action-tag action-tag--${step.action}`}>{step.action}</span>{step.target && <span className="step-row__locator">{step.target}</span>}</span>
+                          <span className="step-row__meta"><span className={`action-tag action-tag--${step.action}`}>{step.action}</span>{(step.target || (step.action === 'navigate' && step.variable)) && <span className="step-row__locator">{step.action === 'navigate' && step.variable ? `{{${step.variable}}}` : step.action === 'navigate' && step.target && hasSensitiveUrlQuery(step.target) ? 'URL with sensitive query' : step.target}</span>}</span>
                         </span>
                         <span className={`status-dot status-dot--${status}`} aria-label={`Step ${status}`} title={status} />
                       </button>
@@ -754,23 +875,24 @@ function App() {
                   </select>
                 </label>
                 <label className="field">
-                  <span>Locator</span>
-                    <input aria-label="Locator" maxLength={2048} value={selectedStep.target ?? ''} placeholder={selectedStep.action === 'navigate' ? 'https://example.com' : 'CSS selector'} onChange={(event) => updateStep(selectedStep.id, 'target', event.currentTarget.value)} />
+                  <span>{selectedStep.action === 'navigate' ? 'Literal URL' : 'Locator'}</span>
+                    <input aria-label={selectedStep.action === 'navigate' ? 'Navigation URL' : 'Locator'} maxLength={2048} value={selectedStep.target ?? ''} placeholder={selectedStep.action === 'navigate' ? 'https://example.com' : 'CSS selector'} onChange={(event) => updateStep(selectedStep.id, 'target', event.currentTarget.value)} />
                     <small className="field-hint">{selectedStep.action === 'navigate' ? 'HTTP or HTTPS URL · no embedded credentials' : 'Up to 2,048 characters'}</small>
                 </label>
+                {selectedStep.action === 'navigate' && <p className="field-hint url-secret-hint">{selectedStep.target && hasSensitiveUrlQuery(selectedStep.target) ? 'This URL query contains a sensitive key. Store the full URL in a secret runtime variable.' : 'URLs can contain access tokens. Prefer a secret runtime variable for a tokenized URL.'}</p>}
                 {['fill', 'select'].includes(selectedStep.action) && <>
                   <label className="field">
                     <span>Value</span>
                     <input aria-label="Value" maxLength={10000} value={selectedStep.value ?? ''} onChange={(event) => updateStep(selectedStep.id, 'value', event.currentTarget.value)} />
                   </label>
-                  {project.variables.length > 0 && <label className="field">
-                    <span>Runtime variable</span>
-                    <select value={selectedStep.variable ?? ''} onChange={(event) => updateStep(selectedStep.id, 'variable', event.currentTarget.value)}>
-                      <option value="">No variable</option>
-                      {project.variables.map((variable) => <option value={variable.name} key={variable.name}>{variable.name}{variable.secret ? ' · secret' : ''}</option>)}
-                    </select>
-                  </label>}
                 </>}
+                {(selectedStep.action === 'navigate' || (['fill', 'select'].includes(selectedStep.action) && project.variables.length > 0)) && <label className="field">
+                  <span>{selectedStep.action === 'navigate' ? 'Runtime URL variable' : 'Runtime variable'}</span>
+                  <select aria-label={selectedStep.action === 'navigate' ? 'Runtime URL variable' : 'Runtime variable'} value={selectedStep.variable ?? ''} onChange={(event) => updateStep(selectedStep.id, 'variable', event.currentTarget.value)}>
+                    <option value="">No variable</option>
+                    {project.variables.map((variable) => <option value={variable.name} key={variable.name}>{variable.name}{variable.secret ? ' · secret' : ''}</option>)}
+                  </select>
+                </label>}
                 <div className="field-row">
                   <label className="field">
                     <span>Timeout (ms)</span>
@@ -945,6 +1067,36 @@ function App() {
                 />
               </label>)}
             </div> : <p className="helper-copy">This project has no runtime values to enter.</p>}
+            <fieldset className="fieldset-reset" disabled={lockWorkspace}>
+              <details className="edit-disclosure variable-manager">
+                <summary>Manage runtime variables <span className="disclosure-count">{project.variables.length}</span></summary>
+                <p className="helper-copy">Use variables for URLs, form values, and other run-time inputs. Mark access tokens and credentials as secret.</p>
+                <label className="field">
+                  <span>Variable name</span>
+                  <input maxLength={64} value={variableDraft.name} placeholder="shareToken" onChange={(event) => { const name = event.currentTarget.value; setVariableDraft((current) => ({ ...current, name })); }} />
+                </label>
+                <label className="field">
+                  <span>Variable description</span>
+                  <input maxLength={2000} value={variableDraft.description} placeholder="Shared report URL" onChange={(event) => { const description = event.currentTarget.value; setVariableDraft((current) => ({ ...current, description })); }} />
+                </label>
+                <label className="review-check review-check--compact">
+                  <input type="checkbox" checked={variableDraft.secret} onChange={(event) => { const secret = event.currentTarget.checked; setVariableDraft((current) => ({ ...current, secret })); }} />
+                  <span>Secret variable</span>
+                </label>
+                <button className="button button--outline button--full" type="button" onClick={addRuntimeVariable} disabled={!variableDraft.name.trim() || project.variables.length >= 500}>Add variable</button>
+                {project.variables.length > 0 && <ul className="layer-list variable-list">{project.variables.map((variable) => {
+                  const used = project.steps.some((step) => step.variable === variable.name);
+                  return <li key={variable.name}>
+                    <span>{variable.description || variable.name}</span>
+                    <label className="review-check review-check--compact variable-secret-toggle">
+                      <input type="checkbox" aria-label={`Mark ${variable.name} as secret`} checked={variable.secret} onChange={(event) => { const secret = event.currentTarget.checked; updateRuntimeVariableSecret(variable.name, secret); }} />
+                      <span>Secret</span>
+                    </label>
+                    <button type="button" className="text-button" aria-label={`Remove runtime variable ${variable.name}`} title={used ? 'Switch its step to a literal before removing it' : 'Remove variable'} disabled={used} onClick={() => removeRuntimeVariable(variable.name)}>Remove</button>
+                  </li>;
+                })}</ul>}
+              </details>
+            </fieldset>
             <button className="button button--primary replay-button" type="button" onClick={replayWorkflow} disabled={lockWorkspace || project.steps.length === 0}>
               {busy === 'replay' ? cancelling ? 'Cancelling…' : 'Replaying…' : 'Replay workflow'}
             </button>
@@ -1085,6 +1237,7 @@ function busyLabel(busy: BusyAction | null) {
     stopRecording: 'Finishing recording…',
     replay: 'Replaying workflow…',
     export: 'Exporting files…',
+    installBrowser: 'Installing browser…',
   };
   return labels[busy];
 }

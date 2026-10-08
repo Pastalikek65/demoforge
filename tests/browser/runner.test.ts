@@ -181,6 +181,44 @@ describe('browser runner', () => {
     expect((await stat(result.video!)).size).toBeGreaterThan(0);
   }, 60_000);
 
+  it('resolves a runtime navigation URL and keeps its sensitive query out of run data', async () => {
+    const outputDir = await makeOutputDirectory();
+    const secret = 'NAVIGATION_RUNTIME_TOKEN_901f';
+    const workflow = project([
+      { id: 'open', name: 'Open private fixture', action: 'navigate', variable: 'startUrl', timeoutMs: 5_000, pauseMs: 0 },
+    ], { variables: [{ name: 'startUrl', secret: true, description: 'Starting URL' }] });
+
+    const result = await replay(workflow, options(outputDir, {
+      variables: { startUrl: `${baseUrl}/?access_token=${secret}&state=fixture` },
+    }));
+
+    expect(result.status).toBe('passed');
+    expect(result.steps[0].status).toBe('passed');
+    expect(JSON.stringify(result)).not.toContain(secret);
+    expect(JSON.stringify(workflow)).not.toContain(secret);
+    expect(result.workflowHash).toMatch(/^[a-f0-9]{64}$/);
+  }, 60_000);
+
+  it('fails closed for literal sensitive navigation URLs and invalid runtime URLs', async () => {
+    const secret = 'UNSAFE_LITERAL_TOKEN_70ac';
+    const literal = await replay(project([
+      { id: 'open', name: 'Open private fixture', action: 'navigate', target: `${baseUrl}/?access_token=${secret}`, timeoutMs: 5_000, pauseMs: 0 },
+    ]), options(await makeOutputDirectory()));
+    expect(literal.status).toBe('failed');
+    expect(literal.steps[0].error).toContain('SENSITIVE_URL_QUERY');
+    expect(JSON.stringify(literal)).not.toContain(secret);
+
+    const credential = 'RUNTIME_URL_PASSWORD_1143';
+    const invalidRuntime = await replay(project([
+      { id: 'open', name: 'Open invalid fixture', action: 'navigate', variable: 'startUrl', timeoutMs: 5_000, pauseMs: 0 },
+    ], { variables: [{ name: 'startUrl', secret: true, description: 'Starting URL' }] }), options(await makeOutputDirectory(), {
+      variables: { startUrl: `http://demo:${credential}@127.0.0.1/` },
+    }));
+    expect(invalidRuntime.status).toBe('failed');
+    expect(invalidRuntime.steps[0].error).toContain('URL_INVALID');
+    expect(JSON.stringify(invalidRuntime)).not.toContain(credential);
+  }, 60_000);
+
   it('cancels an in-flight wait, marks later work not-run, and releases Chromium for another run', async () => {
     const outputDir = await makeOutputDirectory();
     const controller = new AbortController();

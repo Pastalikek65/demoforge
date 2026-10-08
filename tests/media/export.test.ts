@@ -5,6 +5,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { exportRun } from '../../src/media/export.js';
+import { workflowHash } from '../../src/core/fingerprint.js';
 import type { Project, RunResult } from '../../src/shared/types.js';
 
 const execute = promisify(execFile);
@@ -20,7 +21,7 @@ async function fixture() {
   project.steps = [{ id: 's1', name: 'Enter private token', action: 'fill', target: '#token', variable: 'token', timeoutMs: 1000, pauseMs: 0 }];
   project.variables = [{ name: 'token', secret: true, description: 'Runtime token' }];
   project.edits.masks = [{ id: 'm1', x: 0, y: 0, width: 80, height: 120, startMs: 0, endMs: 2000 }];
-  const run: RunResult = { schemaVersion: 1, status: 'passed', projectName: project.name, startedAt: '2026-10-08T00:00:00Z', durationMs: 2000, video, cursor: [], steps: [{ id: 's1', name: 'Enter private token', status: 'passed', startMs: 0, endMs: 1000, screenshot }] };
+  const run: RunResult = { schemaVersion: 1, status: 'passed', projectName: project.name, workflowHash: workflowHash(project), startedAt: '2026-10-08T00:00:00Z', durationMs: 2000, video, cursor: [], steps: [{ id: 's1', name: 'Enter private token', status: 'passed', startMs: 0, endMs: 1000, screenshot }] };
   return { dir, project, run };
 }
 describe('sanitized real-media export', () => {
@@ -31,6 +32,7 @@ describe('sanitized real-media export', () => {
   });
   test('encodes actual MP4/GIF and irreversibly masks video and guide images', async () => {
     const { dir, project, run } = await fixture();
+    project.steps[0].name = '<script>Updated guide label</script>';
     const outputDir = path.join(dir, 'shared');
     const result = await exportRun(project, run, { outputDir, formats: ['mp4', 'gif', 'markdown', 'html'], reviewed: true, ffmpegPath: ffmpeg });
     expect(result.files.length).toBeGreaterThanOrEqual(4);
@@ -44,6 +46,7 @@ describe('sanitized real-media export', () => {
     const html = await readFile(path.join(outputDir, 'guide.html'), 'utf8');
     expect(html).not.toContain('<script>');
     expect(html).toContain('&lt;script&gt;');
+    expect(html).toContain('Updated guide label');
     expect(html).toContain('Runtime variable');
     expect(await readFile(path.join(outputDir, 'guide.md'), 'utf8')).not.toContain('capture.webm');
     expect(await readdir(outputDir)).not.toContain('capture.webm');

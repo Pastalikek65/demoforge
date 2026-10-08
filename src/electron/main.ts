@@ -8,6 +8,8 @@ import { trustedSender, validateVariables } from './boundary.js';
 import { BrowserService } from '../service/client.js';
 import { exportRun } from '../media/export.js';
 import { doctor } from '../doctor.js';
+import { workflowHash } from '../core/fingerprint.js';
+import { installBrowser } from './browser-setup.js';
 import type { RunResult, Project, ExportOptions } from '../shared/types.js';
 
 let window: BrowserWindow;
@@ -21,7 +23,7 @@ const previewFiles = new Map<string, string>();
 protocol.registerSchemesAsPrivileged([{ scheme: 'demoforge-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
 const index = fileURLToPath(new URL('../renderer/index.html', import.meta.url));
 const editorURL = pathToFileURL(index).href;
-const fingerprint = (project: Project) => JSON.stringify({ steps: project.steps, viewport: project.viewport, variables: project.variables });
+const fingerprint = workflowHash;
 async function captureFolder(): Promise<string> {
   const parent = path.join(app.getPath('userData'), 'captures'); await mkdir(parent, { recursive: true });
   return mkdtemp(path.join(parent, 'run-'));
@@ -31,7 +33,13 @@ async function exclusive<T>(operation: () => Promise<T>): Promise<T> {
   active = true; try { return await operation(); } finally { active = false; }
 }
 app.whenReady().then(async () => {
-  if (app.isPackaged) process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(process.resourcesPath, 'browser-runtime');
+  const browserDirectory = path.join(app.getPath('userData'), 'browser-runtime');
+  if (app.isPackaged) process.env.PLAYWRIGHT_BROWSERS_PATH = browserDirectory;
+  if (process.argv.includes('--install-browser')) {
+    try { await installBrowser(browserDirectory); app.exit(0); }
+    catch (error) { console.error(error instanceof Error ? error.message : 'Browser setup failed.'); app.exit(1); }
+    return;
+  }
   protocol.handle('demoforge-media', request => {
     const file = previewFiles.get(request.url);
     return file ? net.fetch(pathToFileURL(file).href, { headers: request.headers }) : new Response('Preview not available', { status: 404 });
@@ -95,6 +103,12 @@ app.whenReady().then(async () => {
   }));
   handle('cancel', () => { exportAbort?.abort(); return service.request('cancel'); });
   handle('doctor', doctor);
+  handle('installBrowser', () => exclusive(async () => {
+    const { chromium } = await import('playwright');
+    const cache = path.dirname(path.dirname(path.dirname(chromium.executablePath())));
+    await installBrowser(process.env.PLAYWRIGHT_BROWSERS_PATH ?? cache);
+    return doctor();
+  }));
   handle('getPreview', () => {
     previewFiles.clear();
     const revision = randomUUID();

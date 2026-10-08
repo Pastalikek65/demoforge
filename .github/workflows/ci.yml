@@ -12,7 +12,7 @@ jobs:
       matrix:
         os: [windows-latest, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -43,3 +43,37 @@ jobs:
         if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum npm test
       - run: npm audit --omit=dev --audit-level=high
+      - run: npm audit --audit-level=high
+      - name: Build platform archive and notices
+        run: npm run package
+      - name: Windows fresh archive acceptance
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path artifacts/install | Out-Null
+          $archives = @(Get-ChildItem release -Filter '*.zip')
+          if ($archives.Count -ne 1) { throw 'Expected one Windows distribution archive.' }
+          $archive = $archives[0]
+          Expand-Archive -LiteralPath $archive.FullName -DestinationPath artifacts/install
+          node scripts/package-smoke.mjs "$pwd/artifacts/install/DemoForge.exe" 2>&1 | Tee-Object artifacts/package-acceptance.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Linux fresh archive acceptance
+        if: runner.os == 'Linux'
+        run: |
+          sudo install -d -o root -g root -m 755 /opt/demoforge-ci
+          sudo tar -xzf release/*.tar.gz -C /opt/demoforge-ci
+          executable=$(rg --files /opt/demoforge-ci | rg '/demoforge$')
+          sandbox=$(rg --files /opt/demoforge-ci | rg '/chrome-sandbox$')
+          sudo chown -R root:root /opt/demoforge-ci
+          sudo chmod 4755 "$sandbox"
+          xvfb-run --auto-servernum node scripts/package-smoke.mjs "$executable" | tee artifacts/package-acceptance.log
+      - run: node scripts/checksums.mjs
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: demoforge-${{ runner.os }}-${{ github.sha }}
+          path: |
+            release/*.zip
+            release/*.tar.gz
+            release/SHA256SUMS.txt
+            artifacts/package-acceptance.log
+            artifacts/licenses/**

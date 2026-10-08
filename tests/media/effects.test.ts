@@ -5,6 +5,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { buildEffects } from '../../src/media/effects.js';
+import { workflowHash } from '../../src/core/fingerprint.js';
 import type { Project, RunResult } from '../../src/shared/types.js';
 
 const execute = promisify(execFile);
@@ -37,6 +38,7 @@ function makeRun(video: string, cursor: RunResult['cursor'] = []): RunResult {
     schemaVersion: 1,
     status: 'passed',
     projectName: 'Effects fixture',
+    workflowHash: workflowHash(makeProject()),
     startedAt: '2026-10-08T00:00:00Z',
     durationMs: 2_000,
     video,

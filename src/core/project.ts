@@ -1,7 +1,8 @@
 import { open, rename, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { basename, dirname, join } from 'node:path';
-import type { Action, Project } from '../shared/types';
+import type { Action, Project } from '../shared/types.js';
+import { hasSensitiveUrlQuery } from '../shared/url.js';
 
 const MAX_PROJECT_BYTES = 5 * 1024 * 1024;
 const MAX_STEPS = 500;
@@ -174,21 +175,29 @@ function parseStep(value: unknown, index: number, variableNames: Set<string>, id
   const pauseMs = requiredNumber(record, 'pauseMs', path, 0, 60_000, true);
 
   if (action === 'navigate') {
-    if (!target) fail(`${path}.target`, 'is required for navigate and must be an absolute HTTP or HTTPS URL');
-    let url: URL;
-    try {
-      url = new URL(target);
-    } catch {
-      return fail(`${path}.target`, 'must be an absolute HTTP or HTTPS URL');
+    if (inputValue !== undefined) fail(path, 'navigate does not accept a literal value');
+    if ((target === undefined) === (variable === undefined)) {
+      fail(path, 'navigate requires exactly one of target or variable');
     }
-    if ((url.protocol !== 'http:' && url.protocol !== 'https:') || !url.hostname) {
-      fail(`${path}.target`, 'must be an absolute HTTP or HTTPS URL');
+    if (variable !== undefined && !variableNames.has(variable)) {
+      fail(`${path}.variable`, `references undeclared variable '${variable}'`);
     }
-    if (url.username || url.password) {
-      fail(`${path}.target`, 'must not contain embedded credentials');
-    }
-    if (inputValue !== undefined || variable !== undefined) {
-      fail(path, 'navigate does not accept value or variable inputs');
+    if (target !== undefined) {
+      let url: URL;
+      try {
+        url = new URL(target);
+      } catch {
+        return fail(`${path}.target`, 'must be an absolute HTTP or HTTPS URL');
+      }
+      if ((url.protocol !== 'http:' && url.protocol !== 'https:') || !url.hostname) {
+        fail(`${path}.target`, 'must be an absolute HTTP or HTTPS URL');
+      }
+      if (url.username || url.password) {
+        fail(`${path}.target`, 'must not contain embedded credentials');
+      }
+      if (hasSensitiveUrlQuery(target)) {
+        fail(`${path}.target`, 'contains a sensitive query parameter; use a runtime variable instead');
+      }
     }
   } else if (action === 'click') {
     if (!target) fail(`${path}.target`, 'is required for click');

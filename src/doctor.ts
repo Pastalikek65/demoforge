@@ -6,7 +6,7 @@ export async function doctor(): Promise<{ name: string; ok: boolean; detail: str
   const { chromium } = await import('playwright');
   const checks = [{ name: 'Runtime', ok: Number(process.versions.node.split('.')[0]) >= 22, detail: `Node ${process.versions.node}; ${process.platform}/${process.arch}` }];
   try { await access(chromium.executablePath()); checks.push({ name: 'Chromium', ok: true, detail: 'Browser installed locally.' }); }
-  catch { checks.push({ name: 'Chromium', ok: false, detail: 'Run npm run browser:install (requires a one-time download).' }); }
+  catch { checks.push({ name: 'Chromium', ok: false, detail: process.versions.electron ? 'Choose Install browser in the editor, or run DemoForge --install-browser (one-time internet download).' : 'Run npm run browser:install (requires a one-time download).' }); }
   try {
     const { stdout } = await execute(process.env.DEMOFORGE_FFMPEG ?? 'ffmpeg', ['-version'], { windowsHide: true, timeout: 10000 });
     checks.push({ name: 'FFmpeg', ok: true, detail: stdout.split(/\r?\n/)[0] });

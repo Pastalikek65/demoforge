@@ -1,6 +1,6 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "noEmit": false, "outDir": "dist", "rootDir": "src", "sourceMap": true },
+  "compilerOptions": { "noEmit": false, "outDir": "dist", "rootDir": "src", "sourceMap": true, "module": "NodeNext", "moduleResolution": "NodeNext" },
   "include": ["src/**/*.ts", "src/**/*.cts"],
   "exclude": ["src/renderer", "tests"]
 }

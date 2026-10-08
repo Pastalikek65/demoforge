@@ -310,6 +310,56 @@ summary:focus-visible {
   border-bottom: 1px solid #e9cac5;
 }
 
+.setup-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 22px;
+  border-bottom: 1px solid #ddd7c8;
+  background: #fff7e8;
+}
+
+.setup-panel__copy {
+  min-width: 0;
+  color: #564b3d;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.setup-panel__copy > strong {
+  display: block;
+  margin-bottom: 2px;
+  color: #382f25;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.setup-panel__copy p {
+  margin: 2px 0 0;
+}
+
+.setup-panel__error {
+  color: #a13e37;
+}
+
+.setup-panel__notice {
+  color: #316448;
+}
+
+.setup-panel__button {
+  flex: 0 0 auto;
+}
+
+.setup-success {
+  padding: 9px 22px;
+  color: #316448;
+  border-bottom: 1px solid #cdddcf;
+  background: #f1f8f1;
+  font-size: 11px;
+}
+
 .message-bar__close {
   display: grid;
   width: 26px;
@@ -652,6 +702,30 @@ summary:focus-visible {
   font-size: 9px;
   font-weight: 450;
   line-height: 1.35;
+}
+
+.url-secret-hint {
+  margin: -5px 0 2px;
+  color: #8d5a2d;
+  font-weight: 550;
+}
+
+.variable-manager {
+  margin: 3px 0 12px;
+}
+
+.variable-list {
+  max-height: 150px;
+  overflow: auto;
+}
+
+.variable-secret-toggle {
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  font-size: 8px;
 }
 
 .field input,
@@ -1598,6 +1672,15 @@ summary:focus-visible {
 }
 
 @media (max-width: 700px) {
+  .setup-panel {
+    align-items: flex-start;
+    padding: 11px 14px;
+  }
+
+  .setup-panel__button {
+    min-height: 33px;
+  }
+
   .topbar {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px 14px;

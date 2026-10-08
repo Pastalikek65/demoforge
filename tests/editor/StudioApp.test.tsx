@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Project, RunResult, StepResult, StudioAPI } from '../../src/shared/types';
+import { workflowHash } from '../../src/core/fingerprint';
 import { parseProject } from '../../src/core/project';
 import App from '../../src/renderer/App';
 
@@ -32,6 +33,7 @@ const runFixture: RunResult = {
   schemaVersion: 1,
   status: 'passed',
   projectName: projectFixture.name,
+  workflowHash: workflowHash(projectFixture),
   startedAt: '2026-10-08T12:00:00.000Z',
   durationMs: 6200,
   steps: projectFixture.steps.map((step, index) => ({
@@ -56,6 +58,7 @@ function makeBridge(project = projectFixture) {
     export: vi.fn(async () => ({ files: ['C:\\Demos\\quarterly-billing.mp4'], warnings: [] })),
     cancel: vi.fn(async () => undefined),
     doctor: vi.fn(async () => []),
+    installBrowser: vi.fn(async () => []),
     getPreview: vi.fn(async () => ({
       video: 'demoforge-media://capture/revision-1/video',
       screenshots: [

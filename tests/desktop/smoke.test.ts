@@ -10,7 +10,9 @@ test('the isolated desktop editor opens and its constrained bridge creates a val
   const application = await electron.launch({ ...(process.env.DEMOFORGE_EXECUTABLE ? { executablePath: process.env.DEMOFORGE_EXECUTABLE } : {}), args: process.env.DEMOFORGE_EXECUTABLE ? [] : [path.resolve('dist/electron/main.js')], env: environment });
   try {
     const window = await application.firstWindow();
-    await expect.poll(() => window.title()).toBe('DemoForge Studio');
+    await window.waitForLoadState('domcontentloaded');
+    await window.getByRole('heading', { name: 'Step sequence' }).waitFor();
+    expect(await window.title()).toBe('DemoForge Studio');
     const boundary = await window.evaluate(() => ({ node: typeof (window as any).require, api: Object.keys((window as any).demoforge ?? {}) }));
     expect(boundary.node).toBe('undefined');
     expect(boundary.api).toContain('newProject');

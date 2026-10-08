@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('demoforge', {
   export: (project: unknown, formats: unknown, reviewed: unknown) => invoke('export', project, formats, reviewed),
   cancel: () => invoke('cancel'),
   doctor: () => invoke('doctor'),
+  installBrowser: () => invoke('installBrowser'),
   getPreview: () => invoke('getPreview'),
   onProgress: (callback: (value: unknown) => void) => {
     const listener = (_event: unknown, value: unknown) => callback(value);

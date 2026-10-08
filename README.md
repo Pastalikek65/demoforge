@@ -39,6 +39,10 @@ npm start
 
 Enter an HTTP(S) URL, start recording and perform your single-tab workflow in the separate browser. Stop from the editor. Rename, reorder and edit the steps, then replay. Inspect the raw preview, add masking regions and review the recording before exporting.
 
+Packaged desktop builds contain Electron and the editor; the workflow browser is downloaded directly from the vendor once using **Install browser** in the setup panel. The panel also identifies a missing external FFmpeg. An internet connection is needed for that initial download. Subsequent recording/replay/export runs locally. Windows ZIPs are unsigned. Linux archives require a desktop session and the system dependencies listed in [packaging](docs/packaging.md).
+
+Navigation steps can use a full runtime URL variable. Known token/password query parameters are converted into secret URL variables during recording; enter the complete URL only when replaying. Ordinary reusable base URLs can use nonsecret variables. Automatic detection cannot recognize every kind of private URL.
+
 CLI capture: `node dist/cli.js record --url http://127.0.0.1:4077/ --output artifacts/recording`. Press Enter in the terminal to finish.
 
 Passwords and recognized sensitive fields become runtime variable references; their values are excluded from the project JSON. Supply replay variables as `DEMOFORGE_VAR_<NAME>` environment variables or in the editor. Automatic field detection is limited. **Raw local videos and screenshots can contain secrets and personal information.** They are not automatically included in exports, and they remain in the local capture folder. Review sanitized outputs before sharing.

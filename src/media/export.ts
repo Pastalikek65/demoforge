@@ -58,7 +58,9 @@ export async function exportRun(project: Project, run: RunResult, options: Expor
       const start = project.edits.trimStartMs / 1000;
       const end = Math.min(project.edits.trimEndMs ?? run.durationMs, run.durationMs) / 1000;
       if (end <= start) throw new Error('Trim range falls outside the recording.');
-      const filters = project.edits.masks.map(mask => maskFilter(mask, true));
+      // Normalize BEFORE applying timed masks: upsampling after masks can repeat
+      // an unmasked source frame inside a newly active redaction interval.
+      const filters = ['fps=25', ...project.edits.masks.map(mask => maskFilter(mask, true))];
       const effects = await buildEffects(project, run, staging);
       filters.push(...effects.filters);
       if (project.edits.crop) {
@@ -84,11 +86,11 @@ export async function exportRun(project: Project, run: RunResult, options: Expor
       return [description, ...captions].filter(Boolean).join(' ');
     });
     if (options.formats.includes('markdown')) {
-      const content = `# ${escapeMD(project.name)}\n\nGenerated locally with DemoForge. Review before sharing.\n\n` + run.steps.map((step, index) => `## ${index + 1}. ${escapeMD(step.name)}\n\n${escapeMD(values[index] ?? '')}\n\n${images[index] ? `![Step ${index + 1}](${images[index]})\n` : ''}`).join('\n');
+      const content = `# ${escapeMD(project.name)}\n\nGenerated locally with DemoForge. Review before sharing.\n\n` + run.steps.map((step, index) => `## ${index + 1}. ${escapeMD(project.steps[index].name)}\n\n${escapeMD(values[index] ?? '')}\n\n${images[index] ? `![Step ${index + 1}](${images[index]})\n` : ''}`).join('\n');
       await writeFile(path.join(staging, 'guide.md'), content); published.push('guide.md');
     }
     if (options.formats.includes('html')) {
-      const content = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'"><title>${escapeHTML(project.name)}</title><style>body{font:16px system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#20252a}img{max-width:100%;border:1px solid #bbb}section{margin:32px 0}</style><main><h1>${escapeHTML(project.name)}</h1><p>Generated locally with DemoForge. Review before sharing.</p>${run.steps.map((step, index) => `<section><h2>${index + 1}. ${escapeHTML(step.name)}</h2><p>${escapeHTML(values[index] ?? '')}</p>${images[index] ? `<img src="${images[index]}" alt="Step ${index + 1}">` : ''}</section>`).join('')}</main></html>`;
+      const content = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'"><title>${escapeHTML(project.name)}</title><style>body{font:16px system-ui;max-width:1000px;margin:40px auto;padding:0 24px;color:#20252a}img{max-width:100%;border:1px solid #bbb}section{margin:32px 0}</style><main><h1>${escapeHTML(project.name)}</h1><p>Generated locally with DemoForge. Review before sharing.</p>${run.steps.map((step, index) => `<section><h2>${index + 1}. ${escapeHTML(project.steps[index].name)}</h2><p>${escapeHTML(values[index] ?? '')}</p>${images[index] ? `<img src="${images[index]}" alt="Step ${index + 1}">` : ''}</section>`).join('')}</main></html>`;
       await writeFile(path.join(staging, 'guide.html'), content); published.push('guide.html');
     }
     await writeFile(path.join(staging, 'export.json'), JSON.stringify({ schemaVersion: 1, name: project.name, formats: options.formats, warnings, files: published }, null, 2));
