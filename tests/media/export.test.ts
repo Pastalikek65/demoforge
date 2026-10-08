@@ -62,4 +62,24 @@ describe('sanitized real-media export', () => {
     expect(await readdir(dir)).not.toContain('canceled');
     expect((await readdir(dir)).filter(file => file.startsWith('.demoforge-export-'))).toEqual([]);
   });
+  test('composes masking with zoom, subtitles, cursor emphasis and delayed audio', async () => {
+    const { dir, project, run } = await fixture();
+    const audio = path.join(dir, 'voice.wav');
+    await execute(ffmpeg, ['-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', audio]);
+    project.edits.annotations = [{ id: 'caption', text: 'Synthetic caption', startMs: 200, endMs: 1500 }];
+    project.edits.zooms = [{ startMs: 500, endMs: 1500, scale: 2, x: 80, y: 60 }];
+    project.edits.cursorHighlight = true;
+    project.edits.audio = { file: audio, startMs: 500, volume: 0.5 };
+    run.cursor = [{ timeMs: 100, x: 120, y: 50 }, { timeMs: 1000, x: 100, y: 50 }];
+    const output = path.join(dir, 'edited');
+    await exportRun(project, run, { outputDir: output, formats: ['mp4', 'html'], reviewed: true, ffmpegPath: ffmpeg });
+    const pixels = await execute(ffmpeg, ['-v', 'error', '-ss', '1', '-i', path.join(output, 'demo.mp4'), '-vf', 'crop=2:2:10:10', '-frames:v', '1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-'], { encoding: 'buffer' });
+    expect(pixels.stdout.length).toBe(12);
+    expect(Math.max(...pixels.stdout)).toBeLessThan(15);
+    const decoded = await execute(ffmpeg, ['-v', 'error', '-i', path.join(output, 'demo.mp4'), '-map', '0:a:0', '-f', 's16le', '-'], { encoding: 'buffer' });
+    expect(decoded.stdout.length).toBeGreaterThan(1000);
+    expect(decoded.stdout.some(byte => byte !== 0)).toBe(true);
+    expect(await readFile(path.join(output, 'guide.html'), 'utf8')).toContain('Synthetic caption');
+    expect((await readdir(output)).filter(file => file.endsWith('.ass'))).toEqual([]);
+  });
 });

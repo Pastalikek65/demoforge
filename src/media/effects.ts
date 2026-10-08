@@ -164,6 +164,9 @@ export async function buildEffects(
   if (trimEndMs <= trimStartMs) throw new Error('Trim range falls outside the recording.');
 
   const filters: string[] = [];
+  // zoompan emits one frame per input frame; normalize the frame rate first
+  // so clips with a different source cadence retain their duration/timeline.
+  if (project.edits.zooms.length) filters.push(`fps=${OUTPUT_FPS}`);
   const cursor = project.edits.cursorHighlight
     ? cursorEvents(run.cursor, project.viewport.width, project.viewport.height, run.durationMs)
     : [];

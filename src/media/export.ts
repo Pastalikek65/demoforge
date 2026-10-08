@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, writeFile, rename, rm, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { parseProject } from '../core/project.js';
 import { validateRun } from '../core/run.js';
+import { buildEffects } from './effects.js';
 import type { Project, RunResult, ExportOptions, ExportResult, Mask } from '../shared/types.js';
 
 const execute = promisify(execFile);
@@ -27,7 +28,6 @@ export async function exportRun(project: Project, run: RunResult, options: Expor
   if (options.signal?.aborted) throw new Error('Export canceled.');
   if (!options.formats.length || options.formats.some(format => !['mp4', 'gif', 'markdown', 'html'].includes(format))) throw new Error('Choose supported export formats.');
   if (run.schemaVersion !== 1 || run.status !== 'passed') throw new Error('Only successful version-one runs can be exported.');
-  if (project.edits.zooms.length || project.edits.annotations.length || project.edits.audio || project.edits.cursorHighlight) throw new Error('These editing features are under development and cannot yet be exported.');
   const output = path.resolve(options.outputDir);
   const parent = path.dirname(output);
   await mkdir(parent, { recursive: true });
@@ -47,6 +47,7 @@ export async function exportRun(project: Project, run: RunResult, options: Expor
         const name = `images/step-${String(index + 1).padStart(3, '0')}.png`;
         // Conservatively mask every region intersecting a step, even if the screenshot was taken at its edge.
         const filters = project.edits.masks.filter(mask => mask.startMs <= step.endMs && mask.endMs >= step.startMs).map(mask => maskFilter(mask, false));
+        if (project.edits.crop) { const crop = project.edits.crop; filters.push(`crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`); }
         await ffmpegRun(binary, ['-i', step.screenshot, '-vf', [...filters, 'format=rgb24'].join(','), '-frames:v', '1', '-map_metadata', '-1', path.join(staging, name)], staging, options.signal);
         images.push(name); published.push(name);
       }
@@ -58,21 +59,30 @@ export async function exportRun(project: Project, run: RunResult, options: Expor
       const end = Math.min(project.edits.trimEndMs ?? run.durationMs, run.durationMs) / 1000;
       if (end <= start) throw new Error('Trim range falls outside the recording.');
       const filters = project.edits.masks.map(mask => maskFilter(mask, true));
+      const effects = await buildEffects(project, run, staging);
+      filters.push(...effects.filters);
       if (project.edits.crop) {
         const crop = project.edits.crop;
         filters.push(`crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`);
       }
       filters.push(`trim=start=${start}:end=${end}`, 'setpts=PTS-STARTPTS', 'pad=ceil(iw/2)*2:ceil(ih/2)*2', 'format=yuv420p');
       const video = path.join(staging, 'demo.mp4');
-      await ffmpegRun(binary, ['-i', run.video, '-vf', filters.join(','), '-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-map_metadata', '-1', '-movflags', '+faststart', video], staging, options.signal);
+      await ffmpegRun(binary, ['-i', run.video, ...effects.audioArgs, '-vf', filters.join(','), ...(effects.audioArgs.length ? [] : ['-an']), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-map_metadata', '-1', '-movflags', '+faststart', video], staging, options.signal);
       if (options.formats.includes('mp4')) published.push('demo.mp4');
       if (options.formats.includes('gif')) {
         await ffmpegRun(binary, ['-i', video, '-filter_complex', 'fps=12,split[a][b];[a]palettegen[p];[b][p]paletteuse', '-map_metadata', '-1', path.join(staging, 'demo.gif')], staging, options.signal);
         published.push('demo.gif');
       }
       if (!options.formats.includes('mp4')) await rm(video);
+      await rm(path.join(staging, 'cursor.ass'), { force: true });
+      await rm(path.join(staging, 'annotations.ass'), { force: true });
     }
-    const values = project.steps.map(step => step.variable ? `Runtime variable: ${step.variable}` : step.action === 'fill' ? 'Text entered (review the screenshot before sharing).' : step.action === 'navigate' ? 'Open the starting page.' : step.action === 'select' ? 'Choose an option.' : '');
+    const values = project.steps.map((step, index) => {
+      const description = step.variable ? `Runtime variable: ${step.variable}` : step.action === 'fill' ? 'Text entered (review the screenshot before sharing).' : step.action === 'navigate' ? 'Open the starting page.' : step.action === 'select' ? 'Choose an option.' : '';
+      const result = run.steps[index];
+      const captions = project.edits.annotations.filter(item => item.startMs <= result.endMs && item.endMs >= result.startMs).map(item => item.text);
+      return [description, ...captions].filter(Boolean).join(' ');
+    });
     if (options.formats.includes('markdown')) {
       const content = `# ${escapeMD(project.name)}\n\nGenerated locally with DemoForge. Review before sharing.\n\n` + run.steps.map((step, index) => `## ${index + 1}. ${escapeMD(step.name)}\n\n${escapeMD(values[index] ?? '')}\n\n${images[index] ? `![Step ${index + 1}](${images[index]})\n` : ''}`).join('\n');
       await writeFile(path.join(staging, 'guide.md'), content); published.push('guide.md');
