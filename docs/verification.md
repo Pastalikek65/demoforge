@@ -22,9 +22,9 @@ The preview release remains a draft. Local retained job logs are `.control/windo
 
 ## Current candidate failure
 
-At candidate `77a25d2`, run [37822691803](https://github.com/Pastalikek65/demoforge/actions/runs/37822691803) passed Windows package acceptance but timed out replaying the recorded workflow on Linux. Diagnostic-only commit `34fd77f`, run [37824875571](https://github.com/Pastalikek65/demoforge/actions/runs/37824875571), reproduced the Linux failure: the first navigation action completed, its screenshot failed, and four subsequent actions were not run. Windows again passed package acceptance. The Linux source suite passed 161 tests with one Windows-only skip; Windows passed 162 tests across 28 files.
+At candidate `77a25d2`, run [37822691803](https://github.com/Pastalikek65/demoforge/actions/runs/37822691803) passed Windows package acceptance but timed out replaying the recorded workflow on Linux. Diagnostic-only commit `34fd77f`, run [37824875571](https://github.com/Pastalikek65/demoforge/actions/runs/37824875571), reproduced the Linux failure: the first step's navigation returned, but its post-step screenshot failed. The step was reported failed and four later steps were not run. Windows again passed package acceptance. The Linux source suite passed 161 tests with one Windows-only skip; Windows passed 162 tests across 28 files.
 
-The screenshot exception's underlying cause is not yet known. Safe cause diagnostics are being added; capture behavior and the exact all-passed acceptance checks remain unchanged. This failure blocks stable release. Earlier preview successes do not close it.
+The screenshot exception's underlying cause is not yet known. Commit `29d2e68` adds allowlisted operation/cause/viewport diagnostics. Its [CI run 37826381848](https://github.com/Pastalikek65/demoforge/actions/runs/37826381848) passed both extracted-package flows, Windows 172 tests and Linux 171 tests with one Windows-only skip, across 29 files. Capture behavior and the exact all-passed acceptance checks remain unchanged, so this pass does not establish a fix for the intermittent failure. A focused twenty-session headed-browser capture test is being added to reproduce it. The unresolved reliability finding blocks stable release.
 
 ## Source and behavior evidence
 

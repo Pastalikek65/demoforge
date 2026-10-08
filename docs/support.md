@@ -9,7 +9,7 @@ DemoForge has passed preview package acceptance on Windows x64 and Ubuntu 24.04 
 | Windows x64, local desktop | The current candidate source requires Node.js 24 LTS for source-checkout development and CI. | Local acceptance of a 1.0.0 archive has not yet been run on this desktop; the Windows CI evidence is recorded separately. |
 | Other operating systems, architectures, and Linux distributions | Not qualified | Not qualified |
 
-The 0.1.0 package results qualify the tested preview archives only. Their independent download checksums are recorded in [verification evidence](verification.md). Subsequent 1.0.0 Windows package runs passed, but Linux replay fails at the first screenshot. That unresolved failure blocks stable release; the preview remains a draft.
+The 0.1.0 package results qualify the tested preview archives only. Their independent download checksums are recorded in [verification evidence](verification.md). The latest 1.0.0 candidate run passed both platforms, but earlier Linux runs failed during replay, including a diagnosed first-step screenshot failure. Capture behavior has not changed; that unresolved intermittent failure blocks stable release. The preview remains a draft.
 
 Chromium exposes a joined, unescaped title string rather than original argument boundaries. The parser treats quote-bearing titles as ambiguous, suppresses renderer-role classification for them, and still checks raw whitespace tokens for forbidden switches, including quote-wrapped switches. This conservative behavior may reject titles unnecessarily. Observed workflow-browser launches use pinned Chromium without caller-controlled arguments, executable replacement, or channel selection; the sandbox tests guard forbidden launch options.
 
