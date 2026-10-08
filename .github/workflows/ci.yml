@@ -130,6 +130,12 @@ jobs:
       - name: Windows full suite
         if: runner.os == 'Windows'
         run: npm test
+      - name: Linux capture surface comparison (diagnostic only)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          xvfb-run --auto-servernum node scripts/headed-capture-probe.mjs | tee artifacts/headed-capture-probe.log
       - name: Linux full suite
         if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum npm test
@@ -182,4 +188,5 @@ jobs:
             release/*.tar.gz
             release/SHA256SUMS.txt
             artifacts/package-acceptance.log
+            artifacts/headed-capture-probe.log
             artifacts/licenses/**
