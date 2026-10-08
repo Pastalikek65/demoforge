@@ -1,0 +1,11 @@
+import { chromium } from 'playwright';
+import { cp, mkdir, readdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+const cache = path.dirname(path.dirname(path.dirname(chromium.executablePath())));
+const destination = path.resolve('artifacts/runtime');
+await mkdir(destination, { recursive: true });
+const folders = (await readdir(cache, { withFileTypes: true })).filter(item => item.isDirectory() && (/^chromium-\d+$/.test(item.name) || /^ffmpeg-\d+$/.test(item.name)));
+if (!folders.some(item => item.name.startsWith('chromium-')) || !folders.some(item => item.name.startsWith('ffmpeg-'))) throw new Error('Install Playwright Chromium before packaging.');
+for (const folder of folders) await cp(path.join(cache, folder.name), path.join(destination, folder.name), { recursive: true, force: false, errorOnExist: true });
+await writeFile(path.join(destination, 'README.txt'), 'Bundled Playwright Chromium and its recording helper. Original vendor license/credit files are preserved. The separate export FFmpeg executable is not bundled.\n');
+console.log(`Staged ${folders.map(item => item.name).join(', ')}`);

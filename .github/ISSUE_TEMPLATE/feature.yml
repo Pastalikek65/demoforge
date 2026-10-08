@@ -1,0 +1,13 @@
+name: Feature request
+description: Describe a useful workflow and the missing capability.
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What are you trying to accomplish?
+    validations:
+      required: true
+  - type: textarea
+    id: approach
+    attributes:
+      label: Suggested behavior and alternatives

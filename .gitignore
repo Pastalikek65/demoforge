@@ -1,0 +1,9 @@
+node_modules/
+dist/
+release/
+artifacts/
+*.local
+.env*
+!.env.example
+coverage/
+test-results/

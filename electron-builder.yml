@@ -1,0 +1,25 @@
+appId: io.github.pastalikek65.demoforge
+productName: DemoForge
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+  - LICENSE
+  - THIRD_PARTY_NOTICES.md
+asarUnpack:
+  - dist/service/**
+extraResources:
+  - from: artifacts/runtime
+    to: browser-runtime
+win:
+  target:
+    - target: zip
+      arch: [x64]
+  signAndEditExecutable: false
+linux:
+  target:
+    - target: tar.gz
+      arch: [x64]
+  category: Development
+artifactName: '${productName}-${version}-${os}-${arch}.${ext}'

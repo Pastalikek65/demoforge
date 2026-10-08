@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "name": "Create a sample notebook order",
+  "viewport": { "width": 1280, "height": 720 },
+  "steps": [
+    { "id": "open", "name": "Open the notebook shop", "action": "navigate", "target": "http://127.0.0.1:4077/", "timeoutMs": 10000, "pauseMs": 600 },
+    { "id": "name", "name": "Enter the customer name", "action": "fill", "target": "[data-testid=customer]", "value": "Alex Example", "timeoutMs": 10000, "pauseMs": 600 },
+    { "id": "notebook", "name": "Choose the studio journal", "action": "select", "target": "[data-testid=notebook]", "value": "studio", "timeoutMs": 10000, "pauseMs": 600 },
+    { "id": "order", "name": "Create the sample order", "action": "click", "target": "[data-testid=order]", "timeoutMs": 10000, "pauseMs": 600 },
+    { "id": "confirm", "name": "Wait for the confirmation", "action": "wait", "target": "[data-testid=result]", "timeoutMs": 10000, "pauseMs": 0 }
+  ],
+  "variables": [],
+  "edits": { "trimStartMs": 0, "masks": [], "annotations": [], "zooms": [], "cursorHighlight": false }
+}

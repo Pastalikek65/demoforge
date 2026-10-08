@@ -1,0 +1,9 @@
+# Architecture and data boundaries
+
+The React editor renders only packaged local assets. Electron uses context isolation, sandboxing, disabled Node integration, a fixed bridge and exact main-frame IPC validation. Navigation, popups, webviews and unsolicited permissions are denied. Chromium is controlled in a separate Node process; remote pages never run in the editor renderer.
+
+`core/project.ts` owns schema validation and bounded atomic file persistence. `browser/` captures and replays workflows. `service/` owns browser operation lifetime. `media/export.ts` produces new sanitized outputs using an externally installed FFmpeg executable with shell-free arguments. Only explicitly reviewed successful runs can be exported. The editor previews trusted current-run media via an allowlisted custom protocol, never arbitrary path requests.
+
+Projects have `schemaVersion: 1`. Unknown versions and unrecognized properties are rejected. Project files describe variables without storing values, and media remains separate. Run reports also use version one. Raw captures remain on disk and can contain private data; masks affect regenerated exports, not the originals.
+
+The browser uses a new temporary context; user browser profiles are not imported. Recordings are single-tab. Runtime website access is intentional; DemoForge is not a sandbox for executing hostile programs or a universal secret detector.

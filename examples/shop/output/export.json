@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "name": "Create a sample notebook order",
+  "formats": [
+    "mp4",
+    "gif",
+    "markdown",
+    "html"
+  ],
+  "warnings": [
+    "Raw recordings remain in the local run folder and may contain sensitive data. Review all outputs before sharing."
+  ],
+  "files": [
+    "images/step-001.png",
+    "images/step-002.png",
+    "images/step-003.png",
+    "images/step-004.png",
+    "images/step-005.png",
+    "demo.mp4",
+    "demo.gif",
+    "guide.md",
+    "guide.html"
+  ]
+}
